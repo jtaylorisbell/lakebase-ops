@@ -2,9 +2,6 @@
 
 Builds the database URL dynamically using LakebaseSettings and OAuthTokenManager
 so that migrations work with Databricks OAuth — no hardcoded credentials.
-
-The database is created automatically if it doesn't exist (connects to the
-default ``postgres`` database to run ``CREATE DATABASE``).
 """
 
 from __future__ import annotations
@@ -31,43 +28,16 @@ def _get_settings() -> LakebaseSettings:
     return LakebaseSettings()
 
 
-def _build_url(lb: LakebaseSettings, database: str | None = None) -> str:
+def _build_url(lb: LakebaseSettings) -> str:
     """Build a SQLAlchemy database URL from LakebaseSettings + OAuth."""
     host = lb.get_host()
     user = lb.get_user()
     password = lb.get_password()
-    db = database or lb.database
     return (
         f"postgresql+psycopg2://{quote_plus(user)}:{quote_plus(password)}"
-        f"@{host}:5432/{db}"
+        f"@{host}:5432/{lb.database}"
         f"?sslmode=require"
     )
-
-
-def _ensure_database(lb: LakebaseSettings) -> None:
-    """Create the application database if it doesn't exist.
-
-    Only the project owner (databricks_superuser) can CREATE DATABASE.
-    Regular users on dev branches inherit the database from the parent
-    branch, so we first check if it exists before attempting creation.
-    """
-    import psycopg
-
-    with psycopg.connect(
-        host=lb.get_host(),
-        port=5432,
-        dbname="postgres",
-        user=lb.get_user(),
-        password=lb.get_password(),
-        sslmode="require",
-        autocommit=True,
-    ) as conn:
-        row = conn.execute(
-            "SELECT 1 FROM pg_database WHERE datname = %s", (lb.database,)
-        ).fetchone()
-        if row:
-            return
-        conn.execute(f"CREATE DATABASE {lb.database}")
 
 
 def run_migrations_offline() -> None:
@@ -87,7 +57,6 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode — connects to the database."""
     lb = _get_settings()
-    _ensure_database(lb)
 
     cfg = config.get_section(config.config_ini_section, {})
     cfg["sqlalchemy.url"] = _build_url(lb)

@@ -64,7 +64,7 @@ class LakebaseSettings(BaseSettings):
         extra="ignore",
     )
 
-    database: str = "todoapp"
+    database: str = "databricks_postgres"
     user: str = ""
     password: str = ""
     project_id: str = "todo-app"

@@ -12,13 +12,5 @@ command:
 env:
   - name: LOG_LEVEL
     value: "INFO"
-  - name: LAKEBASE_PROJECT_ID
-    value: "todo-app"
   - name: LAKEBASE_BRANCH_ID
     value: "production"
-  - name: LAKEBASE_ENDPOINT_ID
-    value: "primary"
-  - name: LAKEBASE_DATABASE
-    value: "todoapp"
-  - name: LAKEBASE_DATA_API_URL
-    value: ""

@@ -5,9 +5,8 @@ This script handles the *database-level* permission layer:
   - Creates OAuth roles for team members via databricks_create_role()
   - Grants appropriate Postgres privileges (CONNECT, USAGE, SELECT, etc.)
 
-Roles are cluster-wide but table-level GRANTs are per-database. This script
-grants on both the default ``databricks_postgres`` database (where the
-databricks_auth extension lives) and the ``todoapp`` application database.
+Everything runs in the default ``databricks_postgres`` database where the
+databricks_auth extension and application tables live.
 
 Usage:
     uv run python manage_roles.py --analysts analyst1@co.com analyst2@co.com
@@ -25,19 +24,14 @@ import sys
 from helpers import get_pg_connection, get_workspace_client
 
 
-# ── Constants ───────────────────────────────────
-
-APP_DATABASE = "todoapp"
-
 # ── SQL templates ────────────────────────────────
 
 SQL_CREATE_ROLE = "SELECT databricks_create_role(%s, 'USER')"
 SQL_CREATE_SP_ROLE = "SELECT databricks_create_role(%s, 'SERVICE_PRINCIPAL')"
 
-# Schema/table grants — run while connected to each target database.
-# GRANT CONNECT references the current database via current_database().
 SQL_GRANT_READWRITE = """
-GRANT CONNECT ON DATABASE {database} TO {role};
+-- Connect + schema access
+GRANT CONNECT ON DATABASE databricks_postgres TO {role};
 GRANT USAGE  ON SCHEMA public TO {role};
 GRANT CREATE ON SCHEMA public TO {role};
 
@@ -53,7 +47,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 """
 
 SQL_GRANT_READONLY = """
-GRANT CONNECT ON DATABASE {database} TO {role};
+GRANT CONNECT ON DATABASE databricks_postgres TO {role};
 GRANT USAGE   ON SCHEMA public TO {role};
 
 GRANT SELECT ON ALL TABLES    IN SCHEMA public TO {role};
@@ -91,53 +85,14 @@ def ensure_sp_role(cur, identity: str) -> None:
     print(f"  + Created SP role: {identity}")
 
 
-def grant_permissions(cur, email: str, database: str, readonly: bool = False) -> None:
-    """Grant Postgres permissions to a role on the current database."""
+def grant_permissions(cur, email: str, readonly: bool = False) -> None:
+    """Grant Postgres permissions to a role."""
     role = _quote_role(email)
     template = SQL_GRANT_READONLY if readonly else SQL_GRANT_READWRITE
-    sql = template.format(role=role, database=database)
+    sql = template.format(role=role)
     cur.execute(sql)
     mode = "read-only" if readonly else "read-write"
-    print(f"  + Granted {mode} on {database}.public to {email}")
-
-
-def _grant_on_all_databases(
-    identities: list[str],
-    create_role_fn,
-    readonly: bool = False,
-) -> None:
-    """Create roles and grant permissions on both default and app databases.
-
-    1. Connects to databricks_postgres to create roles (extension lives here).
-    2. Grants on databricks_postgres.
-    3. Connects to the app database and grants there too (if it exists).
-    """
-    # Step 1: create roles + grant on databricks_postgres
-    conn = get_pg_connection()
-    conn.autocommit = True
-    try:
-        with conn.cursor() as cur:
-            cur.execute("CREATE EXTENSION IF NOT EXISTS databricks_auth")
-            for identity in identities:
-                print(f"\nProvisioning: {identity}")
-                create_role_fn(cur, identity)
-                grant_permissions(cur, identity, "databricks_postgres", readonly)
-    finally:
-        conn.close()
-
-    # Step 2: grant on the app database (if it exists)
-    try:
-        app_conn = get_pg_connection(database=APP_DATABASE)
-        app_conn.autocommit = True
-        try:
-            with app_conn.cursor() as cur:
-                for identity in identities:
-                    grant_permissions(cur, identity, APP_DATABASE, readonly)
-        finally:
-            app_conn.close()
-    except Exception as e:
-        # App database may not exist yet (e.g. first-time setup before migrations)
-        print(f"\n  (Skipping {APP_DATABASE} grants — database may not exist: {e})")
+    print(f"  + Granted {mode} on public schema to {email}")
 
 
 def provision_app_roles(app_name: str) -> None:
@@ -165,7 +120,19 @@ def provision_app_roles(app_name: str) -> None:
     else:
         print(f"Warning: App '{app_name}' has no service_principal_client_id")
 
-    _grant_on_all_databases(identities, ensure_sp_role)
+    conn = get_pg_connection()
+    conn.autocommit = True
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("CREATE EXTENSION IF NOT EXISTS databricks_auth")
+            for identity in identities:
+                print(f"\nProvisioning SP: {identity}")
+                ensure_sp_role(cur, identity)
+                grant_permissions(cur, identity)
+    finally:
+        conn.close()
+
     print("\nDone.")
 
 
@@ -174,7 +141,20 @@ def provision_users(emails: list[str], readonly: bool = False) -> None:
     if not emails:
         return
 
-    _grant_on_all_databases(emails, ensure_role, readonly)
+    conn = get_pg_connection()
+    conn.autocommit = True
+
+    try:
+        with conn.cursor() as cur:
+            # Ensure the databricks_auth extension is available
+            cur.execute("CREATE EXTENSION IF NOT EXISTS databricks_auth")
+            for email in emails:
+                print(f"\nProvisioning: {email}")
+                ensure_role(cur, email)
+                grant_permissions(cur, email, readonly=readonly)
+    finally:
+        conn.close()
+
     print("\nDone.")
 
 
