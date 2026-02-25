@@ -69,7 +69,7 @@ class LakebaseSettings(BaseSettings):
     password: str = ""
     project_id: str = "todo-app"
     branch_id: str = ""
-    endpoint_id: str = "default"
+    endpoint_id: str = "primary"
     data_api_url: str = ""
 
     def get_branch_id(self) -> str:
@@ -84,7 +84,7 @@ class LakebaseSettings(BaseSettings):
             return self.branch_id
 
         w = _get_workspace_client()
-        if w.config.client_id:
+        if w.config.client_id or w.config.azure_client_id:
             return "production"
 
         me = w.current_user.me()
@@ -148,8 +148,8 @@ class LakebaseSettings(BaseSettings):
             return self.user
 
         w = _get_workspace_client()
-        if w.config.client_id:
-            return w.config.client_id
+        if w.config.client_id or w.config.azure_client_id:
+            return w.config.client_id or w.config.azure_client_id
 
         me = w.current_user.me()
         return me.user_name
