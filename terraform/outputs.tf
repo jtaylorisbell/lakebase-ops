@@ -16,13 +16,3 @@ output "endpoint_names" {
     for k, e in databricks_postgres_endpoint.extra : k => e.name
   }
 }
-
-output "manage_users" {
-  description = "Users with CAN_MANAGE (read-write Postgres roles)."
-  value       = var.manage_users
-}
-
-output "use_users" {
-  description = "Users with CAN_USE (read-only Postgres roles)."
-  value       = var.use_users
-}
