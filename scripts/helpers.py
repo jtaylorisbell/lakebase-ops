@@ -128,7 +128,7 @@ def get_pg_connection(
     endpoint_id : str
         Endpoint ID (default: primary).
     """
-    _project = project_id or os.getenv("LAKEBASE_PROJECT_ID", "my-app")
+    _project = project_id or os.getenv("LAKEBASE_PROJECT_ID", "todo-app")
     _branch = branch_id or os.getenv("LAKEBASE_BRANCH_ID", "production")
 
     return psycopg2.connect(
