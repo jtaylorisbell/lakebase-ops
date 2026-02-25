@@ -45,7 +45,12 @@ def _build_url(lb: LakebaseSettings, database: str | None = None) -> str:
 
 
 def _ensure_database(lb: LakebaseSettings) -> None:
-    """Create the application database if it doesn't exist."""
+    """Create the application database if it doesn't exist.
+
+    Only the project owner (databricks_superuser) can CREATE DATABASE.
+    Regular users on dev branches inherit the database from the parent
+    branch, so we first check if it exists before attempting creation.
+    """
     import psycopg
 
     with psycopg.connect(
@@ -57,10 +62,12 @@ def _ensure_database(lb: LakebaseSettings) -> None:
         sslmode="require",
         autocommit=True,
     ) as conn:
-        try:
-            conn.execute(f"CREATE DATABASE {lb.database}")
-        except psycopg.errors.DuplicateDatabase:
-            pass
+        row = conn.execute(
+            "SELECT 1 FROM pg_database WHERE datname = %s", (lb.database,)
+        ).fetchone()
+        if row:
+            return
+        conn.execute(f"CREATE DATABASE {lb.database}")
 
 
 def run_migrations_offline() -> None:

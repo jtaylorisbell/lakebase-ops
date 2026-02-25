@@ -74,7 +74,7 @@ def create_branch(
         parent=parent,
         branch=Branch(
             spec=BranchSpec(
-                parent=f"{parent}/branches/{parent_branch}",
+                source_branch=f"{parent}/branches/{parent_branch}",
                 no_expiry=True,
             ),
         ),
