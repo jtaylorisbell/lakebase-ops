@@ -1,6 +1,6 @@
 # lakebase-ops
 
-A reference repository for deploying and maintaining a **Databricks Lakebase Autoscaling** project on **Azure**, using infrastructure-as-code (Terraform + Databricks Asset Bundles), Alembic for Postgres migrations, and Python scripts for role and branch management.
+A reference repository for deploying and maintaining a **Databricks Lakebase Autoscaling** project on **Azure**, using Terraform for infrastructure provisioning, Databricks Asset Bundles for app deployment, Alembic for Postgres migrations, and Python scripts for role and branch management.
 
 > **Lakebase Autoscaling** is currently in Beta in: `eastus2`, `westeurope`, `westus`.
 
@@ -16,7 +16,7 @@ lakebase-ops/
 ├── Makefile                         # Common workflow commands
 ├── .env.example                     # Environment variable template
 │
-├── terraform/                       # Option A — Terraform
+├── terraform/                       # Infrastructure provisioning (Terraform)
 │   ├── providers.tf
 │   ├── variables.tf
 │   ├── terraform.tfvars.example
@@ -24,9 +24,6 @@ lakebase-ops/
 │   ├── branches.tf                  # Dev / staging branches + endpoints
 │   ├── permissions.tf               # Project ACLs (CAN_USE / CAN_MANAGE)
 │   └── outputs.tf
-│
-├── bundles/                         # Option B — Databricks Asset Bundles
-│   └── databricks.yml
 │
 ├── alembic.ini                      # Alembic config (at project root)
 ├── alembic/                         # Database migrations (SDK OAuth via LakebaseSettings)
@@ -36,7 +33,7 @@ lakebase-ops/
 │
 └── scripts/                         # Operational Python helpers
     ├── helpers.py                   # Shared connection / auth utilities (SDK OAuth)
-    ├── manage_roles.py              # Create & grant Postgres roles
+    ├── manage_roles.py              # Create & grant Postgres roles (users + SPs)
     └── manage_branches.py           # Create, list, reset branches via SDK
 ```
 
@@ -46,8 +43,8 @@ lakebase-ops/
 
 | Tool | Minimum Version | Purpose |
 |---|---|---|
-| [Terraform](https://developer.hashicorp.com/terraform/install) | 1.5+ | Infrastructure provisioning (Option A) |
-| [Databricks CLI](https://docs.databricks.com/dev-tools/cli/install) | 0.287.0+ | Asset Bundles (Option B), auth tokens |
+| [Terraform](https://developer.hashicorp.com/terraform/install) | 1.5+ | Infrastructure provisioning |
+| [Databricks CLI](https://docs.databricks.com/dev-tools/cli/install) | 0.287.0+ | App deployment (DABs), auth tokens |
 | [uv](https://docs.astral.sh/uv/) | 0.4+ | Python package management, script runner |
 | Python | 3.10+ | Alembic migrations, helper scripts |
 | psql *(optional)* | 15+ | Ad-hoc Postgres access |
@@ -67,9 +64,8 @@ git clone <repo-url> && cd lakebase-ops
 cp .env.example .env           # fill in your values
 uv sync
 
-# 2. Provision  (pick ONE)
-make tf-apply                  # Terraform
-make dab-deploy                # Databricks Asset Bundles
+# 2. Provision infrastructure
+make tf-apply                  # Terraform: project, branches, endpoints, ACLs
 
 # 3. Manage roles
 make roles                     # creates Postgres roles & grants
@@ -122,7 +118,7 @@ TEAM_ENGINEERS='["eng1@company.com","eng2@company.com"]'
 
 ---
 
-## 2 · Provisioning with Terraform (Option A)
+## 2 · Provisioning with Terraform
 
 ### `terraform/providers.tf`
 
@@ -352,89 +348,7 @@ terraform apply
 
 ---
 
-## 3 · Provisioning with Databricks Asset Bundles (Option B)
-
-### `bundles/databricks.yml`
-
-```yaml
-bundle:
-  name: lakebase-ops
-
-# ── Targets ──────────────────────────────────────
-# Each target maps to a workspace + set of resource overrides.
-# Use `databricks bundle deploy -t <target>` to deploy.
-targets:
-  dev:
-    default: true
-    workspace:
-      host: https://<workspace>.azuredatabricks.net
-
-  prod:
-    workspace:
-      host: https://<workspace>.azuredatabricks.net
-
-# ── Resources ────────────────────────────────────
-resources:
-  # ── Project ──────────────────────────────────
-  postgres_projects:
-    my_app:
-      project_id: "my-app"
-      display_name: "My Application"
-      pg_version: 17
-
-  # ── Branches ─────────────────────────────────
-  # The production branch + its endpoint are created
-  # automatically when the project is provisioned.
-  postgres_branches:
-    development:
-      parent: ${resources.postgres_projects.my_app.id}
-      branch_id: "development"
-      no_expiry: true
-
-    staging:
-      parent: ${resources.postgres_projects.my_app.id}
-      branch_id: "staging"
-      no_expiry: true
-
-  # ── Endpoints (computes) ─────────────────────
-  postgres_endpoints:
-    dev_primary:
-      parent: ${resources.postgres_branches.development.id}
-      endpoint_id: "primary"
-      endpoint_type: "ENDPOINT_TYPE_READ_WRITE"
-      autoscaling_limit_min_cu: 0.5
-      autoscaling_limit_max_cu: 2
-
-    staging_primary:
-      parent: ${resources.postgres_branches.staging.id}
-      endpoint_id: "primary"
-      endpoint_type: "ENDPOINT_TYPE_READ_WRITE"
-      autoscaling_limit_min_cu: 0.5
-      autoscaling_limit_max_cu: 4
-```
-
-### Usage
-
-```bash
-cd bundles
-databricks bundle validate
-databricks bundle deploy            # deploys to the default (dev) target
-databricks bundle deploy -t prod    # deploys to prod target
-```
-
-> **Note:** DABs does not currently manage `databricks_permissions` for Lakebase projects. Use the Terraform `permissions.tf` or the SDK scripts for ACL management.
-
-### Cleaning Up
-
-```bash
-# DABs doesn't support `bundle destroy` for Lakebase (endpoints can't be
-# deleted individually). Delete the project directly instead:
-databricks postgres delete-project projects/my-app
-```
-
----
-
-## 4 · Database Migrations with Alembic
+## 3 · Database Migrations with Alembic
 
 Alembic manages Postgres schema changes as versioned Python files. The `alembic/env.py` uses `LakebaseSettings` from the application to resolve credentials via the Databricks SDK — no hardcoded connection strings needed. It also auto-creates the application database if it doesn't exist.
 
@@ -459,7 +373,7 @@ uv run alembic downgrade -1
 
 ---
 
-## 5 · Postgres Role Management
+## 4 · Postgres Role Management
 
 Lakebase has **two independent permission layers**:
 
@@ -485,6 +399,9 @@ uv run python scripts/manage_roles.py --from-env
 uv run python scripts/manage_roles.py --engineers eng1@co.com eng2@co.com
 uv run python scripts/manage_roles.py --analysts analyst1@co.com
 uv run python scripts/manage_roles.py --readonly reader@co.com
+
+# CI/CD: create SERVICE_PRINCIPAL roles for the CI SP and App SP
+uv run python scripts/manage_roles.py --app lakebase-todo-app-dev
 ```
 
 ### `scripts/manage_branches.py`
@@ -508,7 +425,7 @@ uv run python scripts/manage_branches.py delete dev/alex
 
 ---
 
-## 6 · Makefile
+## 5 · Makefile
 
 All Makefile targets use `uv run` for Python and Alembic commands.
 
@@ -519,13 +436,13 @@ make tf-plan          # terraform plan
 make tf-apply         # terraform apply -auto-approve
 make tf-destroy       # terraform destroy -auto-approve
 
-# ── Databricks Asset Bundles ─────────────────────
+# ── Databricks Asset Bundles (App) ───────────────
 make dab-validate     # databricks bundle validate
 make dab-deploy       # databricks bundle deploy
-make dab-destroy      # delete the Lakebase project
 
 # ── Roles ────────────────────────────────────────
 make roles            # create Postgres roles from .env TEAM_* arrays
+make roles-app APP_NAME=my-app-dev  # create SP roles for CI + App
 
 # ── Migrations ───────────────────────────────────
 make migrate           # uv run alembic upgrade head
@@ -542,7 +459,7 @@ make branch-delete NAME=dev/alex  # delete a branch
 
 ---
 
-## 7 · Recommended Workflow
+## 6 · Recommended Workflow
 
 ### Initial Setup (one-time)
 
@@ -581,7 +498,7 @@ These two layers are **independent** — granting CAN_MANAGE does not automatica
 
 ---
 
-## 8 · Key Concepts for Postgres Newcomers
+## 7 · Key Concepts for Postgres Newcomers
 
 **Roles vs Users** — In Postgres, a "user" is just a role with LOGIN privilege. Lakebase creates OAuth-authenticated roles via `databricks_create_role()`.
 
@@ -598,7 +515,6 @@ These two layers are **independent** — granting CAN_MANAGE does not automatica
 ## References
 
 - [Lakebase Autoscaling API guide](https://learn.microsoft.com/en-us/azure/databricks/oltp/projects/api-usage)
-- [Manage with Databricks Asset Bundles](https://docs.databricks.com/aws/en/oltp/projects/manage-with-bundles)
 - [Grant user access tutorial](https://learn.microsoft.com/en-us/azure/databricks/oltp/projects/grant-user-access-tutorial)
 - [Branch-based dev workflow](https://learn.microsoft.com/en-us/azure/databricks/oltp/projects/dev-workflow-tutorial)
 - [Terraform: databricks_permissions](https://registry.terraform.io/providers/databricks/databricks/latest/docs/resources/permissions)

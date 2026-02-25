@@ -22,23 +22,23 @@ tf-apply: tf-init
 tf-destroy:
 	cd terraform && terraform destroy -auto-approve
 
-# ── Databricks Asset Bundles ─────────────────────
-.PHONY: dab-validate dab-deploy dab-destroy
+# ── Databricks Asset Bundles (App) ───────────────
+.PHONY: dab-validate dab-deploy
 
 dab-validate:
-	cd bundles && databricks bundle validate
+	databricks bundle validate
 
 dab-deploy: dab-validate
-	cd bundles && databricks bundle deploy
-
-dab-destroy:
-	databricks postgres delete-project projects/$(LAKEBASE_PROJECT_ID)
+	databricks bundle deploy
 
 # ── Roles ────────────────────────────────────────
-.PHONY: roles
+.PHONY: roles roles-app
 
 roles:
 	cd scripts && uv run python manage_roles.py --from-env
+
+roles-app:
+	uv run python scripts/manage_roles.py --app $(APP_NAME)
 
 # ── Migrations ───────────────────────────────────
 .PHONY: migrate migrate-status migrate-downgrade migrate-new

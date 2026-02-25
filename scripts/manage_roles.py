@@ -10,6 +10,7 @@ Usage:
     uv run python manage_roles.py --engineers eng1@co.com eng2@co.com
     uv run python manage_roles.py --readonly reader@co.com
     uv run python manage_roles.py --from-env          # reads TEAM_* from .env
+    uv run python manage_roles.py --app my-app-dev    # CI + App SP roles
 """
 
 import argparse
@@ -17,12 +18,13 @@ import json
 import os
 import sys
 
-from helpers import get_pg_connection
+from helpers import get_pg_connection, get_workspace_client
 
 
 # ── SQL templates ────────────────────────────────
 
 SQL_CREATE_ROLE = "SELECT databricks_create_role(%s, 'USER')"
+SQL_CREATE_SP_ROLE = "SELECT databricks_create_role(%s, 'SERVICE_PRINCIPAL')"
 
 SQL_GRANT_READWRITE = """
 -- Connect + schema access
@@ -70,6 +72,16 @@ def ensure_role(cur, email: str) -> None:
     print(f"  + Created role: {email}")
 
 
+def ensure_sp_role(cur, identity: str) -> None:
+    """Create a SERVICE_PRINCIPAL Postgres role if it doesn't already exist."""
+    cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (identity,))
+    if cur.fetchone():
+        print(f"  + SP role already exists: {identity}")
+        return
+    cur.execute(SQL_CREATE_SP_ROLE, (identity,))
+    print(f"  + Created SP role: {identity}")
+
+
 def grant_permissions(cur, email: str, readonly: bool = False) -> None:
     """Grant Postgres permissions to a role."""
     role = _quote_role(email)
@@ -78,6 +90,47 @@ def grant_permissions(cur, email: str, readonly: bool = False) -> None:
     cur.execute(sql)
     mode = "read-only" if readonly else "read-write"
     print(f"  + Granted {mode} on public schema to {email}")
+
+
+def provision_app_roles(app_name: str) -> None:
+    """Create Postgres roles for CI and App service principals.
+
+    Detects the CI SP identity from the current SDK session and looks up
+    the App SP client_id via the Databricks Apps API. Both get
+    SERVICE_PRINCIPAL roles with read-write permissions.
+    """
+    w = get_workspace_client()
+
+    identities: list[str] = []
+
+    # CI service principal — the identity running this script
+    me = w.current_user.me()
+    print(f"\nCI service principal: {me.user_name}")
+    identities.append(me.user_name)
+
+    # App service principal — looked up via the Apps API
+    app = w.apps.get(name=app_name)
+    app_sp_id = app.service_principal_client_id
+    if app_sp_id:
+        print(f"App service principal ({app_name}): {app_sp_id}")
+        identities.append(app_sp_id)
+    else:
+        print(f"Warning: App '{app_name}' has no service_principal_client_id")
+
+    conn = get_pg_connection()
+    conn.autocommit = True
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("CREATE EXTENSION IF NOT EXISTS databricks_auth")
+            for identity in identities:
+                print(f"\nProvisioning SP: {identity}")
+                ensure_sp_role(cur, identity)
+                grant_permissions(cur, identity)
+    finally:
+        conn.close()
+
+    print("\nDone.")
 
 
 def provision_users(emails: list[str], readonly: bool = False) -> None:
@@ -129,7 +182,17 @@ def main():
         action="store_true",
         help="Read TEAM_ENGINEERS and TEAM_ANALYSTS from .env as JSON arrays.",
     )
+    parser.add_argument(
+        "--app",
+        metavar="APP_NAME",
+        help="Create SERVICE_PRINCIPAL roles for the CI SP and the Databricks App SP.",
+    )
     args = parser.parse_args()
+
+    # --app mode: create SP roles for CI + App service principals
+    if args.app:
+        provision_app_roles(args.app)
+        return
 
     engineers = list(args.engineers)
     analysts = list(args.analysts)

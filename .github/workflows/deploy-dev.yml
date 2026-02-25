@@ -26,12 +26,8 @@ jobs:
       - name: Deploy bundle (creates app + service principal)
         run: databricks bundle deploy -t dev
 
-      - name: Provision Lakebase and create roles
-        run: |
-          uv run python -c "
-          from todo_app.infra import LakebaseProvisioner
-          LakebaseProvisioner().provision_ci(app_name='lakebase-todo-app-dev')
-          "
+      - name: Create Postgres roles for CI and App service principals
+        run: uv run python scripts/manage_roles.py --app lakebase-todo-app-dev
 
       - name: Run database migrations
         env:
