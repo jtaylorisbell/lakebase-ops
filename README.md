@@ -1,14 +1,25 @@
-# Lakebase Todo App
+# 🏗️ Lakebase Ops — End-to-End Automation Reference
 
-A full-stack To-Do application built on **Databricks Apps** and **Lakebase Autoscaling** (Azure). The backend is a FastAPI service that talks to Postgres via the [Lakebase Data API](https://learn.microsoft.com/en-us/azure/databricks/oltp/projects/data-api) (PostgREST). The frontend is React + TypeScript.
+A complete, working reference for **automating Databricks Lakebase Autoscaling** — from infrastructure provisioning and CI/CD pipelines to developer onboarding and branch-based workflows. Built around a full-stack To-Do app (FastAPI + React) as the working example.
 
-> **Lakebase Autoscaling** is in Beta in: `eastus2`, `westeurope`, `westus`.
+> ⚠️ **Lakebase Autoscaling** is in Beta in: `eastus2`, `westeurope`, `westus`.
 
-All credentials are resolved via **Databricks SDK OAuth** — no tokens or passwords in config files.
+## 🎯 What this repo demonstrates
+
+Lakebase Autoscaling is new and there aren't established patterns for managing it in production. This repo solves that by providing a complete, working reference for:
+
+- **🔧 Infrastructure as Code** — Terraform provisions the Lakebase project, branches, endpoints, and platform ACLs via a CI service principal
+- **🚀 Automated CI/CD** — GitHub Actions deploys the app, creates Postgres roles for service principals, runs migrations, and ships code — all via OAuth (no PATs)
+- **👥 Developer onboarding** — Add an email to a tfvars file, trigger a workflow, and the developer gets platform permissions + Postgres roles + Data API access
+- **🌿 Branch-per-developer isolation** — Each developer gets a copy-on-write Lakebase branch forked from production, with auto-detection so no config is needed
+- **🔐 Two-layer permission model** — Platform ACLs (Terraform) and Postgres roles (SQL scripts) are managed independently and automated through CI
+- **📡 Data API (PostgREST)** — The app uses the Lakebase Data API instead of direct Postgres connections, with authenticator role grants managed automatically
+
+The To-Do app itself is intentionally simple — the real value is the operational scaffolding around it.
 
 ---
 
-## Repository Structure
+## 📂 Repository Structure
 
 ```
 lakebase-todo-app/
@@ -19,34 +30,32 @@ lakebase-todo-app/
 ├── pyproject.toml                   # Python deps (uv)
 ├── Makefile                         # Common workflow shortcuts
 │
-├── src/todo_app/                    # Backend (FastAPI)
+├── src/todo_app/                    # 🐍 Backend (FastAPI + Data API)
 │   ├── config.py                    # LakebaseSettings — auto-detects branch, user, endpoint
 │   ├── api/                         # FastAPI routes
 │   └── db/                          # Data API client (PostgREST), schemas
 │
-├── frontend/                        # Frontend (React + Vite + Tailwind)
+├── frontend/                        # ⚛️ Frontend (React + Vite + Tailwind)
 │   ├── src/
 │   └── package.json
 │
-├── alembic/                         # Database migrations
+├── alembic/                         # 🗃️ Database migrations
 │   ├── env.py                       # OAuth-aware, auto-resolves credentials
 │   └── versions/
 │
-├── terraform/                       # Infrastructure provisioning
-│   ├── providers.tf
+├── terraform/                       # 🏗️ Infrastructure provisioning
 │   ├── project.tf                   # Lakebase project
 │   ├── branches.tf                  # Extra long-lived branches + endpoints
 │   ├── permissions.tf               # Project ACLs (CAN_MANAGE / CAN_USE)
-│   ├── variables.tf
-│   ├── outputs.tf
+│   ├── variables.tf / outputs.tf
 │   └── terraform.tfvars             # Real values for this project
 │
-├── scripts/
+├── scripts/                         # 🛠️ Operational scripts
 │   ├── helpers.py                   # Shared connection / auth utilities
 │   ├── manage_roles.py              # Postgres roles & Data API grants
 │   └── manage_branches.py           # Create / delete / reset branches
 │
-└── .github/workflows/
+└── .github/workflows/               # ⚡ CI/CD pipelines
     ├── deploy-dev.yml               # Push to main → deploy to dev
     ├── release-prod.yml             # Manual → deploy to prod + GitHub release
     └── infra.yml                    # Manual → Terraform plan/apply + role provisioning
@@ -54,7 +63,7 @@ lakebase-todo-app/
 
 ---
 
-## Prerequisites
+## ✅ Prerequisites
 
 | Tool | Version | Purpose |
 |---|---|---|
@@ -65,9 +74,9 @@ lakebase-todo-app/
 
 ---
 
-## Local Development
+## 💻 Local Development
 
-> **Prerequisite:** You need **CAN_MANAGE** permission on the Lakebase project to create branches and endpoints. An admin adds your email to `manage_users` in `terraform/terraform.tfvars` and runs the infra workflow — see [Developer onboarding](#developer-onboarding).
+> **Prerequisite:** You need **CAN_MANAGE** permission on the Lakebase project to create branches and endpoints. An admin adds your email to `manage_users` in `terraform/terraform.tfvars` and runs the infra workflow — see [👥 Developer onboarding](#-developer-onboarding).
 
 ### 1. Clone and install
 
@@ -120,7 +129,7 @@ cd frontend && npm run dev
 - Backend: http://localhost:8000
 - Frontend: http://localhost:5173
 
-### How auto-detection works
+### 🔍 How auto-detection works
 
 The app reads `DATABRICKS_CONFIG_PROFILE` from `.env` and resolves everything else via the SDK:
 
@@ -137,11 +146,11 @@ Service principals default to the `production` branch. Set `LAKEBASE_BRANCH_ID` 
 
 ---
 
-## Infrastructure
+## 🏗️ Infrastructure
 
 Infrastructure is managed with **Terraform** and provisioned via the CI service principal (which becomes the project owner and gets `databricks_superuser`).
 
-### Initial setup (admin)
+### 🔰 Initial setup (admin)
 
 1. Configure `terraform/terraform.tfvars`:
 
@@ -161,31 +170,33 @@ use_users    = ["analyst@company.com"]
    - `apply` — create project, branches, endpoints, ACLs
    - `roles-only` — create Postgres roles + Data API grants (no Terraform)
 
-### Developer onboarding
+### 👥 Developer onboarding
 
 To give a new developer access:
 
 1. Add their email to `manage_users` in `terraform/terraform.tfvars`
 2. Commit, push to main
 3. Trigger the infra workflow with `roles-only`
-4. Have them follow the [Local Development](#local-development) steps above
+4. Have them follow the [💻 Local Development](#-local-development) steps above
 
-### Two permission layers
+This grants them both platform permissions (CAN_MANAGE via Terraform) and database permissions (Postgres role + Data API authenticator grant via the CI SP).
+
+### 🔐 Two permission layers
 
 | Layer | Controls | Managed by |
 |---|---|---|
 | **Project ACLs** | Platform ops (create branches, manage endpoints) | `terraform/permissions.tf` |
 | **Postgres roles** | Data access (SELECT, INSERT, etc.) + Data API | `scripts/manage_roles.py` |
 
-These are independent — CAN_MANAGE does not grant database access, and vice versa.
+These are independent — CAN_MANAGE does not grant database access, and vice versa. Both are automated through the infra workflow.
 
 ---
 
-## CI/CD
+## ⚡ CI/CD
 
-All workflows authenticate via an **Azure Entra ID service principal** (`ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_TENANT_ID`).
+All workflows authenticate via an **Azure Entra ID service principal** (`ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_TENANT_ID`). No PATs, no manual token rotation.
 
-### Deploy to Dev (`deploy-dev.yml`)
+### 🟢 Deploy to Dev (`deploy-dev.yml`)
 
 Triggers on every push to `main`:
 
@@ -194,7 +205,7 @@ Triggers on every push to `main`:
 3. `alembic upgrade head` — runs migrations on production branch
 4. `databricks bundle run -t dev` — deploys app source code
 
-### Release to Prod (`release-prod.yml`)
+### 🏷️ Release to Prod (`release-prod.yml`)
 
 Manual trigger from `main` with a version number:
 
@@ -202,18 +213,18 @@ Manual trigger from `main` with a version number:
 2. Same deploy flow as dev but targeting `prod`
 3. Creates a Git tag and GitHub Release
 
-### Provision Infrastructure (`infra.yml`)
+### 🔧 Provision Infrastructure (`infra.yml`)
 
 Manual trigger with `plan`, `apply`, or `roles-only`:
 
-- **plan/apply**: Runs Terraform to manage the Lakebase project, branches, endpoints, and ACLs
-- **roles-only**: Parses `terraform/terraform.tfvars` and creates Postgres roles + grants (including Data API authenticator grants)
+- **plan/apply** — Terraform manages the Lakebase project, branches, endpoints, and ACLs
+- **roles-only** — Parses `terraform/terraform.tfvars` and creates Postgres roles + grants (including Data API authenticator grants). No Terraform state needed.
 
 ---
 
-## Database Migrations
+## 🗃️ Database Migrations
 
-Alembic manages Postgres schema changes. The `alembic/env.py` resolves credentials via the Databricks SDK.
+Alembic manages Postgres schema changes. The `alembic/env.py` resolves credentials via the Databricks SDK — no connection strings to manage.
 
 ```bash
 # Apply all pending migrations
@@ -234,7 +245,7 @@ uv run alembic downgrade -1
 
 ---
 
-## Scripts
+## 🛠️ Scripts
 
 ### `manage_roles.py` — Postgres roles and permissions
 
@@ -263,7 +274,7 @@ uv run python scripts/manage_branches.py delete dev-alex
 
 ---
 
-## Architecture
+## 🏛️ Architecture
 
 ```
 ┌─────────────────────────────────┐
@@ -287,7 +298,7 @@ uv run python scripts/manage_branches.py delete dev-alex
               └─────────────────────┘
 ```
 
-### Data API (PostgREST)
+### 📡 Data API (PostgREST)
 
 The backend uses the [Lakebase Data API](https://learn.microsoft.com/en-us/azure/databricks/oltp/projects/data-api) instead of direct Postgres connections. This is a PostgREST-compatible REST interface that auto-generates endpoints from your database schema.
 
@@ -296,7 +307,7 @@ The backend uses the [Lakebase Data API](https://learn.microsoft.com/en-us/azure
 - Each user needs `GRANT "user@email" TO authenticator` (handled by `manage_roles.py`)
 - The project owner **cannot** use the Data API (authenticator can't assume superuser roles)
 
-### Branching
+### 🌿 Branching
 
 Lakebase branches are **copy-on-write** — creating a branch is instant and doesn't duplicate data. Each developer gets an isolated branch forked from production.
 
@@ -306,7 +317,7 @@ Auto-detection convention:
 
 ---
 
-## References
+## 📚 References
 
 - [Lakebase Data API](https://learn.microsoft.com/en-us/azure/databricks/oltp/projects/data-api)
 - [Lakebase API guide](https://learn.microsoft.com/en-us/azure/databricks/oltp/projects/api-usage)
