@@ -67,6 +67,8 @@ lakebase-todo-app/
 
 ## Local Development
 
+> **Prerequisite:** You need **CAN_MANAGE** permission on the Lakebase project to create branches and endpoints. An admin adds your email to `manage_users` in `terraform/terraform.tfvars` and runs the infra workflow — see [Developer onboarding](#developer-onboarding).
+
 ### 1. Clone and install
 
 ```bash
