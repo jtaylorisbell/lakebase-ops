@@ -7,7 +7,10 @@ extra_branches = {
   staging     = { min_cu = 0.5, max_cu = 4, no_expiry = true }
 }
 
+# Users listed here get BOTH project ACLs AND Postgres roles:
+#   manage_users → CAN_MANAGE + read-write Postgres role
+#   use_users    → CAN_USE + read-only Postgres role
 manage_groups = ["Engineering"]
 use_groups    = ["Data Analysts"]
-manage_users  = ["lead@company.com"]
+manage_users  = ["lead@company.com", "dev@company.com"]
 use_users     = ["analyst@company.com"]

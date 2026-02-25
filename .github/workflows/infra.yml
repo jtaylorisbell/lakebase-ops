@@ -16,17 +16,25 @@ env:
   ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
   ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
   ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+  LAKEBASE_PROJECT_ID: todo-app
+  LAKEBASE_BRANCH_ID: production
+  LAKEBASE_ENDPOINT_ID: primary
 
 jobs:
   terraform:
     name: Terraform ${{ inputs.action }}
     runs-on: ubuntu-latest
+    outputs:
+      manage: ${{ steps.users.outputs.manage }}
+      use: ${{ steps.users.outputs.use }}
     defaults:
       run:
         working-directory: terraform
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
       - name: Terraform init
         run: terraform init
@@ -37,3 +45,35 @@ jobs:
       - name: Terraform apply
         if: inputs.action == 'apply'
         run: terraform apply -auto-approve
+
+      - name: Export user lists
+        if: inputs.action == 'apply'
+        id: users
+        run: |
+          echo "manage=$(terraform output -json manage_users)" >> "$GITHUB_OUTPUT"
+          echo "use=$(terraform output -json use_users)" >> "$GITHUB_OUTPUT"
+
+  roles:
+    name: Create Postgres roles
+    needs: terraform
+    if: inputs.action == 'apply'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --extra migrations
+
+      - name: Create read-write roles (CAN_MANAGE users)
+        if: needs.terraform.outputs.manage != '[]'
+        run: |
+          uv run python scripts/manage_roles.py --engineers \
+            $(echo '${{ needs.terraform.outputs.manage }}' | python3 -c "import json,sys; print(' '.join(json.load(sys.stdin)))")
+
+      - name: Create read-only roles (CAN_USE users)
+        if: needs.terraform.outputs.use != '[]'
+        run: |
+          uv run python scripts/manage_roles.py --readonly \
+            $(echo '${{ needs.terraform.outputs.use }}' | python3 -c "import json,sys; print(' '.join(json.load(sys.stdin)))")
