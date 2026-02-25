@@ -28,6 +28,7 @@ class Todo(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     completed: Mapped[bool] = mapped_column(default=False)
     priority: Mapped[str] = mapped_column(Text, default="medium")
+    priority_order: Mapped[int] = mapped_column(default=2)
     user_email: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(default=_utc_now)

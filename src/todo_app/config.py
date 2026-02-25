@@ -70,6 +70,7 @@ class LakebaseSettings(BaseSettings):
     project_id: str = "todo-app"
     branch_id: str = ""
     endpoint_id: str = "default"
+    data_api_url: str = ""
 
     def get_branch_id(self) -> str:
         """Get the branch ID, auto-detecting from Databricks identity if not set.
@@ -119,6 +120,16 @@ class LakebaseSettings(BaseSettings):
                 _resolved_endpoints[expected] = ep.name
                 return ep.name
             raise
+
+    def get_data_api_url(self) -> str:
+        """Get the Data API URL, constructing from workspace host + endpoint if not set."""
+        if self.data_api_url:
+            return self.data_api_url.rstrip("/")
+
+        w = _get_workspace_client()
+        host = w.config.host.rstrip("/")
+        endpoint_name = self.get_endpoint_name()
+        return f"{host}/api/2.0/lakebase/{endpoint_name}/data"
 
     def get_host(self) -> str:
         """Resolve the Postgres host dynamically from the Lakebase endpoint."""

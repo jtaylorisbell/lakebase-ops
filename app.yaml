@@ -20,3 +20,5 @@ env:
     value: "primary"
   - name: LAKEBASE_DATABASE
     value: "todoapp"
+  - name: LAKEBASE_DATA_API_URL
+    value: ""

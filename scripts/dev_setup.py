@@ -95,13 +95,17 @@ def main() -> None:
         os.environ["LAKEBASE_ENDPOINT_ID"] = endpoint_id
         _run_migrations()
 
+    # Build Data API URL
+    data_api_url = f"{w.config.host.rstrip('/')}/api/2.0/lakebase/projects/{project_id}/branches/{branch_id}/endpoints/{endpoint_id}/data"
+
     print("\n" + "=" * 60)
     print("Setup complete!")
     print("=" * 60)
-    print(f"  Project:  {project_id}")
-    print(f"  Branch:   {branch_id}")
-    print(f"  Endpoint: {endpoint_id}")
-    print(f"  Host:     {host}")
+    print(f"  Project:      {project_id}")
+    print(f"  Branch:       {branch_id}")
+    print(f"  Endpoint:     {endpoint_id}")
+    print(f"  Host:         {host}")
+    print(f"  Data API URL: {data_api_url}")
 
     # Build env prefix for non-default config values
     default_branch = _derive_branch_id(w)

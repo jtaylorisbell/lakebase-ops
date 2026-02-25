@@ -1,6 +1,5 @@
 """FastAPI application for Todo App."""
 
-from contextlib import asynccontextmanager
 from pathlib import Path
 
 import structlog
@@ -19,57 +18,20 @@ from todo_app.api.schemas import (
     UpdateTodoRequest,
 )
 from todo_app.api.user import get_current_user
-from todo_app.db.postgres import get_db
+from todo_app.db.data_api import get_data_api
 
 logger = structlog.get_logger()
 
 
-def _check_migrations() -> None:
-    """Warn on startup if the database has pending migrations."""
-    try:
-        from alembic.config import Config
-        from alembic.script import ScriptDirectory
-
-        project_root = _find_project_root()
-        alembic_cfg = Config(str(project_root / "alembic.ini"))
-        alembic_cfg.set_main_option("script_location", str(project_root / "alembic"))
-        head = ScriptDirectory.from_config(alembic_cfg).get_current_head()
-
-        db = get_db()
-        with db.session() as conn, conn.cursor() as cur:
-            cur.execute("SELECT version_num FROM alembic_version")
-            row = cur.fetchone()
-            current = row[0] if row else None
-
-        if current is None:
-            logger.warning(
-                "migrations_not_initialized",
-                hint="Run 'alembic upgrade head' to initialize the database",
-            )
-        elif current != head:
-            logger.warning(
-                "migrations_pending",
-                current=current,
-                head=head,
-                hint="Run 'alembic upgrade head' to apply pending migrations",
-            )
-        else:
-            logger.info("migrations_up_to_date", revision=current)
-    except Exception as e:
-        logger.warning("migration_check_failed", error=str(e))
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    _check_migrations()
-    yield
+def _get_user_token(request: Request) -> str | None:
+    """Extract the user's OAuth token injected by Databricks Apps proxy."""
+    return request.headers.get("X-Forwarded-Access-Token")
 
 
 app = FastAPI(
     title="Lakebase Todo App API",
     description="A beautiful To-Do list powered by Databricks Apps and Lakebase",
     version=__version__,
-    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -82,9 +44,10 @@ app.add_middleware(
 
 
 @app.get("/api/health", response_model=HealthResponse)
-async def health() -> HealthResponse:
-    db = get_db()
-    db_status = "connected" if db.health_check() else "disconnected"
+async def health(request: Request) -> HealthResponse:
+    token = _get_user_token(request)
+    api = get_data_api()
+    db_status = "connected" if api.health_check(user_token=token) else "disconnected"
     return HealthResponse(status="ok", version=__version__, database=db_status)
 
 
@@ -102,12 +65,14 @@ async def get_me(request: Request) -> CurrentUserResponse:
 @app.post("/api/todos", response_model=TodoResponse, status_code=201)
 async def create_todo(body: CreateTodoRequest, request: Request) -> TodoResponse:
     user = get_current_user(request)
-    db = get_db()
-    todo = db.create_todo(
+    token = _get_user_token(request)
+    api = get_data_api()
+    todo = api.create_todo(
         title=body.title,
         description=body.description,
         priority=body.priority.value,
         user_email=user.email,
+        user_token=token,
     )
     return TodoResponse(**todo)
 
@@ -118,9 +83,10 @@ async def list_todos(
     limit: int = 100,
     request: Request = None,
 ) -> TodoListResponse:
-    user = get_current_user(request)
-    db = get_db()
-    todos = db.list_todos(user_email=user.email, completed=completed, limit=limit)
+    token = _get_user_token(request)
+    api = get_data_api()
+    # RLS handles user filtering automatically via the forwarded token
+    todos = api.list_todos(completed=completed, limit=limit, user_token=token)
     return TodoListResponse(
         todos=[TodoResponse(**t) for t in todos],
         total=len(todos),
@@ -128,23 +94,28 @@ async def list_todos(
 
 
 @app.get("/api/todos/{todo_id}", response_model=TodoResponse)
-async def get_todo(todo_id: str) -> TodoResponse:
-    db = get_db()
-    todo = db.get_todo(todo_id)
+async def get_todo(todo_id: str, request: Request) -> TodoResponse:
+    token = _get_user_token(request)
+    api = get_data_api()
+    todo = api.get_todo(todo_id, user_token=token)
     if todo is None:
         raise HTTPException(status_code=404, detail="Todo not found")
     return TodoResponse(**todo)
 
 
 @app.put("/api/todos/{todo_id}", response_model=TodoResponse)
-async def update_todo(todo_id: str, body: UpdateTodoRequest) -> TodoResponse:
-    db = get_db()
-    todo = db.update_todo(
-        todo_id=todo_id,
+async def update_todo(
+    todo_id: str, body: UpdateTodoRequest, request: Request
+) -> TodoResponse:
+    token = _get_user_token(request)
+    api = get_data_api()
+    todo = api.update_todo(
+        todo_id,
         title=body.title,
         description=body.description,
         completed=body.completed,
         priority=body.priority.value if body.priority else None,
+        user_token=token,
     )
     if todo is None:
         raise HTTPException(status_code=404, detail="Todo not found")
@@ -152,29 +123,29 @@ async def update_todo(todo_id: str, body: UpdateTodoRequest) -> TodoResponse:
 
 
 @app.patch("/api/todos/{todo_id}/toggle", response_model=TodoResponse)
-async def toggle_todo(todo_id: str) -> TodoResponse:
-    db = get_db()
-    existing = db.get_todo(todo_id)
-    if existing is None:
-        raise HTTPException(status_code=404, detail="Todo not found")
-    todo = db.update_todo(todo_id=todo_id, completed=not existing["completed"])
+async def toggle_todo(todo_id: str, request: Request) -> TodoResponse:
+    token = _get_user_token(request)
+    api = get_data_api()
+    todo = api.toggle_todo(todo_id, user_token=token)
     if todo is None:
         raise HTTPException(status_code=404, detail="Todo not found")
     return TodoResponse(**todo)
 
 
 @app.delete("/api/todos/{todo_id}", status_code=204)
-async def delete_todo(todo_id: str):
-    db = get_db()
-    if not db.delete_todo(todo_id):
+async def delete_todo(todo_id: str, request: Request):
+    token = _get_user_token(request)
+    api = get_data_api()
+    if not api.delete_todo(todo_id, user_token=token):
         raise HTTPException(status_code=404, detail="Todo not found")
 
 
 @app.get("/api/stats", response_model=TodoStatsResponse)
 async def get_stats(request: Request) -> TodoStatsResponse:
-    user = get_current_user(request)
-    db = get_db()
-    stats = db.get_stats(user_email=user.email)
+    token = _get_user_token(request)
+    api = get_data_api()
+    # RLS handles user filtering automatically via the forwarded token
+    stats = api.get_stats(user_token=token)
     return TodoStatsResponse(**stats)
 
 
