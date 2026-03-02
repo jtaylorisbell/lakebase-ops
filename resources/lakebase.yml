@@ -1,0 +1,6 @@
+resources:
+  postgres_projects:
+    todo_app:
+      project_id: todo-app
+      display_name: Lakebase Todo App
+      pg_version: 17

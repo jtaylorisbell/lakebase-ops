@@ -8,11 +8,11 @@ A complete, working reference for **automating Databricks Lakebase Autoscaling**
 
 Lakebase Autoscaling is new and there aren't established patterns for managing it in production. This repo solves that by providing a complete, working reference for:
 
-- **🔧 Infrastructure as Code** — Terraform provisions the Lakebase project, branches, endpoints, and platform ACLs via a CI service principal
-- **🚀 Automated CI/CD** — GitHub Actions deploys the app, creates Postgres roles for service principals, runs migrations, and ships code — all via OAuth (no PATs)
-- **👥 Developer onboarding** — Add an email to a tfvars file, trigger a workflow, and the developer gets platform permissions + Postgres roles + Data API access
+- **🔧 Infrastructure as Code** — Databricks Asset Bundles provision the Lakebase project and platform ACLs alongside the app in a single declarative config
+- **🚀 Automated CI/CD** — GitHub Actions deploys the app + infrastructure, creates Postgres roles for service principals, runs migrations, and ships code — all via OAuth (no PATs)
+- **👥 Developer onboarding** — Add an email to `resources/lakebase.yml` + `scripts/db_access.json`, deploy, and the developer gets platform permissions + Postgres roles + Data API access
 - **🌿 Branch-per-developer isolation** — Each developer gets a copy-on-write Lakebase branch forked from production, with auto-detection so no config is needed
-- **🔐 Two-layer permission model** — Platform ACLs (Terraform) and Postgres roles (SQL scripts) are managed independently and automated through CI
+- **🔐 Two-layer permission model** — Platform ACLs (DABs) and Postgres roles (SQL scripts) are managed independently and automated through CI
 - **📡 Data API (PostgREST)** — The app uses the Lakebase Data API instead of direct Postgres connections, with authenticator role grants managed automatically
 
 The To-Do app itself is intentionally simple — the real value is the operational scaffolding around it.
@@ -25,8 +25,10 @@ The To-Do app itself is intentionally simple — the real value is the operation
 lakebase-todo-app/
 ├── app.py                           # Entrypoint (adds src/ to path, imports FastAPI app)
 ├── app.yaml                         # Databricks Apps runtime config
-├── databricks.yml                   # DAB config (app deployment, not infra)
-├── resources/todo_app.yml           # DAB app resource definition
+├── databricks.yml                   # DAB config (app + Lakebase infra)
+├── resources/
+│   ├── todo_app.yml                 # App resource definition
+│   └── lakebase.yml                 # Lakebase project + platform ACLs
 ├── pyproject.toml                   # Python deps (uv)
 ├── Makefile                         # Common workflow shortcuts
 │
@@ -43,22 +45,15 @@ lakebase-todo-app/
 │   ├── env.py                       # OAuth-aware, auto-resolves credentials
 │   └── versions/
 │
-├── terraform/                       # 🏗️ Infrastructure provisioning
-│   ├── project.tf                   # Lakebase project
-│   ├── branches.tf                  # Extra long-lived branches + endpoints
-│   ├── permissions.tf               # Project ACLs (CAN_MANAGE / CAN_USE)
-│   ├── variables.tf / outputs.tf
-│   └── terraform.tfvars             # Real values for this project
-│
 ├── scripts/                         # 🛠️ Operational scripts
 │   ├── helpers.py                   # Shared connection / auth utilities
 │   ├── manage_roles.py              # Postgres roles & Data API grants
-│   └── manage_branches.py           # Create / delete / reset branches
+│   ├── manage_branches.py           # Create / delete / reset branches
+│   └── db_access.json               # Database-layer user lists (readwrite/readonly)
 │
 └── .github/workflows/               # ⚡ CI/CD pipelines
     ├── deploy-dev.yml               # Push to main → deploy to dev
-    ├── release-prod.yml             # Manual → deploy to prod + GitHub release
-    └── infra.yml                    # Manual → Terraform plan/apply + role provisioning
+    └── release-prod.yml             # Manual → deploy to prod + GitHub release
 ```
 
 ---
@@ -70,13 +65,12 @@ lakebase-todo-app/
 | [uv](https://docs.astral.sh/uv/) | 0.4+ | Python package management |
 | [Databricks CLI](https://docs.databricks.com/dev-tools/cli/install) | 0.287+ | Auth, bundle deploy |
 | [Node.js](https://nodejs.org/) | 20+ | Frontend |
-| [Terraform](https://developer.hashicorp.com/terraform/install) | 1.5+ | Infrastructure (admin only) |
 
 ---
 
 ## 💻 Local Development
 
-> **Prerequisite:** You need **CAN_MANAGE** permission on the Lakebase project to create branches and endpoints. An admin adds your email to `manage_users` in `terraform/terraform.tfvars` and runs the infra workflow — see [👥 Developer onboarding](#-developer-onboarding).
+> **Prerequisite:** You need **CAN_MANAGE** permission on the Lakebase project to create branches and endpoints. An admin adds your email to `resources/lakebase.yml` permissions and deploys the bundle — see [👥 Developer onboarding](#-developer-onboarding).
 
 ### 1. Clone and install
 
@@ -148,47 +142,25 @@ Service principals default to the `production` branch. Set `LAKEBASE_BRANCH_ID` 
 
 ## 🏗️ Infrastructure
 
-Infrastructure is managed with **Terraform** and provisioned via the CI service principal (which becomes the project owner and gets `databricks_superuser`).
-
-### 🔰 Initial setup (admin)
-
-1. Configure `terraform/terraform.tfvars`:
-
-```hcl
-project_id           = "todo-app"
-project_display_name = "Lakebase Todo App"
-pg_version           = 17
-
-extra_branches = {}
-
-manage_users = ["dev1@company.com", "dev2@company.com"]
-use_users    = ["analyst@company.com"]
-```
-
-2. Run the **Provision Infrastructure** workflow in GitHub Actions:
-   - `plan` — preview changes
-   - `apply` — create project, branches, endpoints, ACLs
-   - `roles-only` — create Postgres roles + Data API grants (no Terraform)
+Infrastructure is managed with **Databricks Asset Bundles** — the Lakebase project and platform ACLs are declared in `resources/lakebase.yml` and deployed alongside the app via `databricks bundle deploy`. The CI service principal becomes the project owner and gets `databricks_superuser`.
 
 ### 👥 Developer onboarding
 
 To give a new developer access:
 
-1. Add their email to `manage_users` in `terraform/terraform.tfvars`
-2. Commit, push to main
-3. Trigger the infra workflow with `roles-only`
+1. **Platform access** — Add their email to `resources/lakebase.yml` permissions with `CAN_MANAGE`
+2. **Database access** — Add their email to `scripts/db_access.json` → `readwrite` list
+3. Commit and push to main — the deploy pipeline handles everything (bundle deploy + role provisioning + migrations)
 4. Have them follow the [💻 Local Development](#-local-development) steps above
-
-This grants them both platform permissions (CAN_MANAGE via Terraform) and database permissions (Postgres role + Data API authenticator grant via the CI SP).
 
 ### 🔐 Two permission layers
 
 | Layer | Controls | Managed by |
 |---|---|---|
-| **Project ACLs** | Platform ops (create branches, manage endpoints) | `terraform/permissions.tf` |
-| **Postgres roles** | Data access (SELECT, INSERT, etc.) + Data API | `scripts/manage_roles.py` |
+| **Project ACLs** | Platform ops (create branches, manage endpoints) | `resources/lakebase.yml` |
+| **Postgres roles** | Data access (SELECT, INSERT, etc.) + Data API | `scripts/manage_roles.py` + `scripts/db_access.json` |
 
-These are independent — CAN_MANAGE does not grant database access, and vice versa. Both are automated through the infra workflow.
+These are independent — CAN_MANAGE does not grant database access, and vice versa. Both are provisioned automatically by the deploy pipeline.
 
 ---
 
@@ -200,10 +172,11 @@ All workflows authenticate via an **Azure Entra ID service principal** (`ARM_CLI
 
 Triggers on every push to `main`:
 
-1. `databricks bundle deploy -t dev` — creates/updates the Databricks App
+1. `databricks bundle deploy -t dev` — creates/updates the App + Lakebase project + ACLs
 2. `manage_roles.py --app` — creates Postgres roles for CI + App service principals
-3. `alembic upgrade head` — runs migrations on production branch
-4. `databricks bundle run -t dev` — deploys app source code
+3. Provision user roles from `scripts/db_access.json` (readwrite + readonly)
+4. `alembic upgrade head` — runs migrations on production branch
+5. `databricks bundle run -t dev` — deploys app source code
 
 ### 🏷️ Release to Prod (`release-prod.yml`)
 
@@ -212,13 +185,6 @@ Manual trigger from `main` with a version number:
 1. Runs tests (ruff + pytest)
 2. Same deploy flow as dev but targeting `prod`
 3. Creates a Git tag and GitHub Release
-
-### 🔧 Provision Infrastructure (`infra.yml`)
-
-Manual trigger with `plan`, `apply`, or `roles-only`:
-
-- **plan/apply** — Terraform manages the Lakebase project, branches, endpoints, and ACLs
-- **roles-only** — Parses `terraform/terraform.tfvars` and creates Postgres roles + grants (including Data API authenticator grants). No Terraform state needed.
 
 ---
 

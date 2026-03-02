@@ -38,6 +38,12 @@ targets:
     default: true
     workspace:
       root_path: /Workspace/.bundle/${bundle.name}/dev
+    resources:
+      postgres_projects:
+        todo_app:
+          permissions:
+            - user_name: taylor.isbell@databricks.com
+              level: CAN_MANAGE
 
   prod:
     workspace:

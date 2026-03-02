@@ -92,6 +92,7 @@ def create_branch(
                 endpoint_type=EndpointType.ENDPOINT_TYPE_READ_WRITE,
                 autoscaling_limit_min_cu=min_cu,
                 autoscaling_limit_max_cu=max_cu,
+                suspend_timeout_duration=600,
             ),
         ),
         endpoint_id="primary",
