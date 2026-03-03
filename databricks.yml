@@ -12,6 +12,8 @@ bundle:
 permissions:
   - user_name: taylor.isbell@databricks.com
     level: CAN_MANAGE
+  - service_principal_name: 58227809-0d11-4334-be81-245233e7525c
+    level: CAN_MANAGE
 
 # Include resource definitions from the resources directory
 include:
