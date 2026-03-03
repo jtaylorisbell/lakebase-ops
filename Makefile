@@ -39,10 +39,10 @@ roles-app:
 	uv run lbctl roles provision --app $(APP_NAME)
 
 roles-diff:
-	uv run lbctl roles diff --config scripts/roles.yml
+	uv run lbctl roles diff --config db/roles.yml
 
 roles-sync:
-	uv run lbctl roles sync --config scripts/roles.yml
+	uv run lbctl roles sync --config db/roles.yml
 
 # ── Migrations ───────────────────────────────────
 .PHONY: migrate migrate-status migrate-downgrade migrate-new

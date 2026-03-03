@@ -192,7 +192,7 @@ def provision(
 def diff(
     config: Annotated[
         Path, typer.Option(help="Path to roles YAML config.")
-    ] = Path("scripts/roles.yml"),
+    ] = Path("db/roles.yml"),
     app_name: Annotated[
         str | None, typer.Option("--app", help="Databricks App name (includes its SP).")
     ] = None,
@@ -233,7 +233,7 @@ def diff(
 def sync(
     config: Annotated[
         Path, typer.Option(help="Path to roles YAML config.")
-    ] = Path("scripts/roles.yml"),
+    ] = Path("db/roles.yml"),
     app_name: Annotated[
         str | None, typer.Option("--app", help="Databricks App name (includes its SP).")
     ] = None,

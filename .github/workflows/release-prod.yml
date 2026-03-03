@@ -53,7 +53,7 @@ jobs:
         run: databricks bundle deploy -t prod
 
       - name: Sync database roles
-        run: uv run lbctl roles sync --config scripts/roles.yml --app lakebase-todo-app-prod
+        run: uv run lbctl roles sync --config db/roles.yml --app lakebase-todo-app-prod
 
       - name: Run database migrations
         run: uv run alembic upgrade head

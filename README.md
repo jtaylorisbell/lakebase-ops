@@ -2,7 +2,7 @@
 
 A complete, working reference for **automating Databricks Lakebase Autoscaling** — from infrastructure provisioning and CI/CD pipelines to developer onboarding and branch-based workflows. Built around a full-stack To-Do app (FastAPI + React) as the working example.
 
-> ⚠️ **Lakebase Autoscaling** is in Beta in: `eastus2`, `westeurope`, `westus`.
+> 🎉 **Lakebase Autoscaling** is now GA!
 
 ## 🎯 What this repo demonstrates
 
@@ -10,7 +10,7 @@ Lakebase Autoscaling is new and there aren't established patterns for managing i
 
 - **🔧 Infrastructure as Code** — Databricks Asset Bundles provision the Lakebase project and platform ACLs alongside the app in a single declarative config
 - **🚀 Automated CI/CD** — GitHub Actions deploys the app + infrastructure, creates Postgres roles for service principals, runs migrations, and ships code — all via OAuth (no PATs)
-- **👥 Developer onboarding** — Add an email to `resources/lakebase.yml` + `scripts/db_access.json`, deploy, and the developer gets platform permissions + Postgres roles + Data API access
+- **👥 Developer onboarding** — Add an email to `databricks.yml` + `db/roles.yml`, deploy, and the developer gets platform permissions + Postgres roles + Data API access
 - **🌿 Branch-per-developer isolation** — Each developer gets a copy-on-write Lakebase branch forked from production, with auto-detection so no config is needed
 - **🔐 Two-layer permission model** — Platform ACLs (DABs) and Postgres roles (SQL scripts) are managed independently and automated through CI
 - **📡 Data API (PostgREST)** — The app uses the Lakebase Data API instead of direct Postgres connections, with authenticator role grants managed automatically
@@ -48,7 +48,7 @@ lakebase-todo-app/
 ├── src/todo_app/cli/                # 🛠️ lbctl CLI (Typer)
 │   ├── __init__.py                  # Root app — registers subcommands
 │   └── roles.py                     # Postgres roles & Data API grants
-├── scripts/
+├── db/
 │   └── roles.yml                     # Desired-state role config (users + access levels)
 │
 └── .github/workflows/               # ⚡ CI/CD pipelines
@@ -70,7 +70,7 @@ lakebase-todo-app/
 
 ## 💻 Local Development
 
-> **Prerequisite:** You need **CAN_MANAGE** permission on the Lakebase project to create branches and endpoints. An admin adds your email to `resources/lakebase.yml` permissions and deploys the bundle — see [👥 Developer onboarding](#-developer-onboarding).
+> **Prerequisite:** You need **CAN_MANAGE** permission on the Lakebase project to create branches and endpoints. An admin adds your email to `databricks.yml` permissions and deploys the bundle — see [👥 Developer onboarding](#-developer-onboarding).
 
 ### 1. Clone and install
 
@@ -86,34 +86,26 @@ cd frontend && npm install && cd ..
 databricks auth login --host https://<workspace>.azuredatabricks.net --profile todo-app-dev
 ```
 
-Create a `.env` file with just the profile name — everything else auto-detects:
-
-```bash
-DATABRICKS_CONFIG_PROFILE=todo-app-dev
-```
+> [!TIP]
+> The `--profile` flag saves your login credentials under a named profile. Create a `.env` file referencing it for easy reuse:
+> ```
+> DATABRICKS_CONFIG_PROFILE=todo-app-dev
+> ```
 
 ### 3. Create your dev branch
 
 ```bash
-databricks postgres create-branch projects/todo-app dev-<your-name> \
-  --json '{"spec": {"source_branch": "projects/todo-app/branches/production", "no_expiry": true}}'
-databricks postgres create-endpoint projects/todo-app/branches/dev-<your-name> primary \
-  --json '{"spec": {"endpoint_type": "ENDPOINT_TYPE_READ_WRITE", "autoscaling_limit_min_cu": 0.5, "autoscaling_limit_max_cu": 2.0}}'
+make branch-create NAME=dev-<your-name>
 ```
-
-Or use the Makefile shortcut: `make branch-create NAME=dev-<your-name>`
 
 This forks from `production` and creates a read-write endpoint with 0.5–2 CU.
 
-> **Keep your dev branch fresh.** Just like merging `main` into a feature branch in Git, you should periodically reset your dev branch to pull the latest schema and data from production. The Databricks CLI doesn't have a dedicated reset command yet, so use the API directly:
->
+> [!TIP]
+> Periodically reset your dev branch to pull the latest schema and data from production:
 > ```bash
-> databricks api post /api/2.0/postgres/projects/todo-app/branches/dev-<your-name>:reset --json '{}'
+> make branch-reset NAME=dev-<your-name>
+> LAKEBASE_BRANCH_ID=dev-<your-name> uv run alembic upgrade head
 > ```
->
-> Or: `make branch-reset NAME=dev-<your-name>`
->
-> After resetting, re-run migrations: `LAKEBASE_BRANCH_ID=dev-<your-name> uv run alembic upgrade head`
 
 ### 4. Run migrations
 
@@ -140,31 +132,30 @@ cd frontend && npm run dev
 
 ### 🔍 How auto-detection works
 
-The app reads `DATABRICKS_CONFIG_PROFILE` from `.env` and resolves everything else via the SDK:
+`LakebaseSettings` in `src/todo_app/config.py` resolves connection details via the Databricks SDK based on the caller's identity. The same logic runs locally and when deployed — no config changes needed.
 
-| Setting | Auto-detected value |
-|---|---|
-| Branch | `dev-{username}` from your email (e.g. `dev-taylor-isbell`) |
-| Endpoint | `primary` |
-| Database | `databricks_postgres` (the default DB) |
-| Data API URL | Constructed from endpoint host + workspace ID |
-| User | Your Databricks email |
-| Password | OAuth token (auto-refreshed) |
+| Setting | Local (user) | Deployed (service principal) |
+|---|---|---|
+| Branch | `dev-{username}` from email | `production` |
+| Endpoint | `primary` | `primary` |
+| Database | `databricks_postgres` | `databricks_postgres` |
+| User | Your Databricks email | SP `client_id` |
+| Password | OAuth token | OAuth token |
 
-Service principals default to the `production` branch. Set `LAKEBASE_BRANCH_ID` explicitly to override.
+Set `LAKEBASE_BRANCH_ID` to override branch detection in either context.
 
 ---
 
 ## 🏗️ Infrastructure
 
-Infrastructure is managed with **Databricks Asset Bundles** — the Lakebase project and platform ACLs are declared in `resources/lakebase.yml` and deployed alongside the app via `databricks bundle deploy`. The CI service principal becomes the project owner and gets `databricks_superuser`.
+Infrastructure is managed with **Databricks Asset Bundles** — the Lakebase project is declared in `resources/lakebase.yml`, platform ACLs in `databricks.yml`, and both are deployed via `databricks bundle deploy`. The CI service principal becomes the project owner and gets `databricks_superuser`.
 
 ### 👥 Developer onboarding
 
 To give a new developer access:
 
-1. **Platform access** — Add their email to `resources/lakebase.yml` permissions with `CAN_MANAGE`
-2. **Database access** — Add their email to `scripts/roles.yml` with `access: readwrite`
+1. **Platform access** — Add their email to `databricks.yml` permissions with `CAN_MANAGE`
+2. **Database access** — Add their email to `db/roles.yml` with `access: readwrite`
 3. Commit and push to main — the deploy pipeline handles everything (bundle deploy + role provisioning + migrations)
 4. Have them follow the [💻 Local Development](#-local-development) steps above
 
@@ -172,8 +163,8 @@ To give a new developer access:
 
 | Layer | Controls | Managed by |
 |---|---|---|
-| **Project ACLs** | Platform ops (create branches, manage endpoints) | `resources/lakebase.yml` |
-| **Postgres roles** | Data access (SELECT, INSERT, etc.) + Data API | `lbctl roles sync` + `scripts/roles.yml` |
+| **Project ACLs** | Platform ops (create branches, manage endpoints) | `databricks.yml` |
+| **Postgres roles** | Data access (SELECT, INSERT, etc.) + Data API | `lbctl roles sync` + `db/roles.yml` |
 
 These are independent — CAN_MANAGE does not grant database access, and vice versa. Both are provisioned automatically by the deploy pipeline.
 
@@ -229,26 +220,12 @@ uv run alembic downgrade -1
 
 ### `lbctl` — Lakebase role management
 
-`lbctl` is installed automatically via `uv sync` and manages the database-layer permissions that no existing tool covers — OAuth role creation via `databricks_create_role()`, Postgres grants, and Data API authenticator setup.
+Manages database-layer permissions — role creation, Postgres grants, and Data API authenticator setup. See [`src/todo_app/cli/README.md`](src/todo_app/cli/README.md) for full command reference.
 
 ```bash
-# Show what's drifted between scripts/roles.yml and live Postgres
-uv run lbctl roles diff --config scripts/roles.yml
-
-# Sync roles to match desired state (CI/CD usage)
-uv run lbctl roles sync --config scripts/roles.yml --app lakebase-todo-app-dev
-
-# Preview changes without applying
-uv run lbctl roles sync --config scripts/roles.yml --dry-run
-
-# Revoke roles not in config
-uv run lbctl roles sync --config scripts/roles.yml --revoke
-
-# Ad-hoc provisioning (still available)
-uv run lbctl roles provision --engineers dev1@co.com --engineers dev2@co.com
+uv run lbctl roles diff   --config db/roles.yml              # show drift
+uv run lbctl roles sync   --config db/roles.yml --app <name> # reconcile
 ```
-
-Each role gets: CONNECT, USAGE, CRUD on all tables/sequences, ALTER DEFAULT PRIVILEGES for future objects, and a GRANT to the Data API `authenticator` role (if enabled).
 
 ### `databricks postgres` — Branch lifecycle
 
