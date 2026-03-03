@@ -61,3 +61,6 @@ terraform/*.tfstate*
 .databricks/
 
 .isaac/worktree_pool/
+
+# Drafts
+BLOG.md
