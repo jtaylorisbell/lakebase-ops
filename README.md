@@ -166,7 +166,7 @@ These are independent — CAN_MANAGE does not grant database access, and vice ve
 
 ## ⚡ CI/CD
 
-All workflows authenticate via an **Azure Entra ID service principal** (`ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_TENANT_ID`). No PATs, no manual token rotation.
+All workflows authenticate via a **Databricks-managed service principal** (`DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET`). No PATs, no manual token rotation.
 
 ### 🟢 Deploy to Dev (`deploy-dev.yml`)
 
