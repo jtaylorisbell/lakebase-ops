@@ -49,7 +49,7 @@ lakebase-todo-app/
 │   ├── __init__.py                  # Root app — registers subcommands
 │   └── roles.py                     # Postgres roles & Data API grants
 ├── scripts/
-│   └── db_access.json               # Database-layer user lists (readwrite/readonly)
+│   └── roles.yml                     # Desired-state role config (users + access levels)
 │
 └── .github/workflows/               # ⚡ CI/CD pipelines
     ├── deploy-dev.yml               # Push to main → deploy to dev
@@ -164,7 +164,7 @@ Infrastructure is managed with **Databricks Asset Bundles** — the Lakebase pro
 To give a new developer access:
 
 1. **Platform access** — Add their email to `resources/lakebase.yml` permissions with `CAN_MANAGE`
-2. **Database access** — Add their email to `scripts/db_access.json` → `readwrite` list
+2. **Database access** — Add their email to `scripts/roles.yml` with `access: readwrite`
 3. Commit and push to main — the deploy pipeline handles everything (bundle deploy + role provisioning + migrations)
 4. Have them follow the [💻 Local Development](#-local-development) steps above
 
@@ -173,7 +173,7 @@ To give a new developer access:
 | Layer | Controls | Managed by |
 |---|---|---|
 | **Project ACLs** | Platform ops (create branches, manage endpoints) | `resources/lakebase.yml` |
-| **Postgres roles** | Data access (SELECT, INSERT, etc.) + Data API | `lbctl roles provision` + `scripts/db_access.json` |
+| **Postgres roles** | Data access (SELECT, INSERT, etc.) + Data API | `lbctl roles sync` + `scripts/roles.yml` |
 
 These are independent — CAN_MANAGE does not grant database access, and vice versa. Both are provisioned automatically by the deploy pipeline.
 
@@ -188,7 +188,7 @@ All workflows authenticate via a **Databricks-managed service principal** (`DATA
 Triggers on every push to `main`:
 
 1. `databricks bundle deploy -t dev` — creates/updates the App + Lakebase project + ACLs
-2. `lbctl roles provision --app ... --db-access ...` — provisions App SP + user Postgres roles in one step
+2. `lbctl roles sync --config ... --app ...` — syncs App SP + user Postgres roles to match desired state
 3. `alembic upgrade head` — runs migrations on production branch
 4. `databricks bundle run -t dev` — deploys app source code
 
@@ -232,14 +232,20 @@ uv run alembic downgrade -1
 `lbctl` is installed automatically via `uv sync` and manages the database-layer permissions that no existing tool covers — OAuth role creation via `databricks_create_role()`, Postgres grants, and Data API authenticator setup.
 
 ```bash
-# Developer roles (read-write)
+# Show what's drifted between scripts/roles.yml and live Postgres
+uv run lbctl roles diff --config scripts/roles.yml
+
+# Sync roles to match desired state (CI/CD usage)
+uv run lbctl roles sync --config scripts/roles.yml --app lakebase-todo-app-dev
+
+# Preview changes without applying
+uv run lbctl roles sync --config scripts/roles.yml --dry-run
+
+# Revoke roles not in config
+uv run lbctl roles sync --config scripts/roles.yml --revoke
+
+# Ad-hoc provisioning (still available)
 uv run lbctl roles provision --engineers dev1@co.com --engineers dev2@co.com
-
-# Read-only roles
-uv run lbctl roles provision --readonly analyst@co.com
-
-# CI/CD: App SP role + all users from db_access.json in one step
-uv run lbctl roles provision --app lakebase-todo-app-dev --db-access scripts/db_access.json
 ```
 
 Each role gets: CONNECT, USAGE, CRUD on all tables/sequences, ALTER DEFAULT PRIVILEGES for future objects, and a GRANT to the Data API `authenticator` role (if enabled).

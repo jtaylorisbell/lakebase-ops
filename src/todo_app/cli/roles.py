@@ -6,6 +6,8 @@ from typing import Annotated
 
 import typer
 
+from todo_app.cli.role_config import AccessLevel, load_config
+from todo_app.cli.role_state import compute_diff, format_diff, query_live_roles
 from todo_app.helpers import get_pg_connection, get_workspace_client
 
 app = typer.Typer(help="Manage Lakebase Postgres roles.")
@@ -43,6 +45,14 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT SELECT ON TABLES    TO {role};
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT USAGE  ON SEQUENCES TO {role};
+"""
+
+SQL_REVOKE_WRITE = """
+REVOKE INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public FROM {role};
+REVOKE CREATE ON SCHEMA public FROM {role};
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    REVOKE INSERT, UPDATE, DELETE ON TABLES FROM {role};
 """
 
 SQL_GRANT_TO_AUTHENTICATOR = "GRANT {role} TO authenticator"
@@ -93,6 +103,21 @@ def grant_permissions(cur, email: str, readonly: bool = False) -> None:
             print("  ! Authenticator grant requires superuser — run via CI")
 
 
+def _resolve_app_sp_id(app_name: str) -> str | None:
+    """Look up the service principal client_id for a Databricks App."""
+    w = get_workspace_client()
+    app_obj = w.apps.get(name=app_name)
+    sp_id = app_obj.service_principal_client_id
+    if sp_id:
+        print(f"App service principal ({app_name}): {sp_id}")
+    else:
+        print(f"Warning: App '{app_name}' has no service_principal_client_id")
+    return sp_id
+
+
+# ── provision (unchanged) ────────────────────────
+
+
 @app.command()
 def provision(
     app_name: Annotated[
@@ -126,13 +151,7 @@ def provision(
     # ── Resolve App SP identity (if --app) ───────
     app_sp_id = None
     if app_name:
-        w = get_workspace_client()
-        app_obj = w.apps.get(name=app_name)
-        app_sp_id = app_obj.service_principal_client_id
-        if app_sp_id:
-            print(f"App service principal ({app_name}): {app_sp_id}")
-        else:
-            print(f"Warning: App '{app_name}' has no service_principal_client_id")
+        app_sp_id = _resolve_app_sp_id(app_name)
 
     if not app_sp_id and not readwrite and not readonly_list:
         print("No roles to provision. Pass --app, --db-access, --engineers, or --readonly.")
@@ -160,6 +179,181 @@ def provision(
                 print(f"\nProvisioning (read-only): {email}")
                 ensure_role(cur, email)
                 grant_permissions(cur, email, readonly=True)
+    finally:
+        conn.close()
+
+    print("\nDone.")
+
+
+# ── diff ─────────────────────────────────────────
+
+
+@app.command()
+def diff(
+    config: Annotated[
+        Path, typer.Option(help="Path to roles YAML config.")
+    ] = Path("scripts/roles.yml"),
+    app_name: Annotated[
+        str | None, typer.Option("--app", help="Databricks App name (includes its SP).")
+    ] = None,
+) -> None:
+    """Show differences between desired config and live Postgres roles."""
+    from todo_app.cli.role_config import AppRole
+
+    desired = load_config(config)
+
+    if app_name:
+        sp_id = _resolve_app_sp_id(app_name)
+        if sp_id:
+            desired.apps.append(AppRole(name=sp_id, access=AccessLevel.readwrite))
+
+    conn = get_pg_connection()
+    conn.autocommit = True
+    try:
+        with conn.cursor() as cur:
+            live = query_live_roles(cur)
+    finally:
+        conn.close()
+
+    role_diff = compute_diff(desired, live)
+
+    if not role_diff.has_changes:
+        print("No changes detected.")
+        raise typer.Exit(code=0)
+
+    print("Changes detected:\n")
+    print(format_diff(role_diff))
+    raise typer.Exit(code=1)
+
+
+# ── sync ─────────────────────────────────────────
+
+
+@app.command()
+def sync(
+    config: Annotated[
+        Path, typer.Option(help="Path to roles YAML config.")
+    ] = Path("scripts/roles.yml"),
+    app_name: Annotated[
+        str | None, typer.Option("--app", help="Databricks App name (includes its SP).")
+    ] = None,
+    revoke: Annotated[
+        bool, typer.Option("--revoke", help="Revoke roles not in config.")
+    ] = False,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Show diff without applying changes.")
+    ] = False,
+) -> None:
+    """Sync live Postgres roles to match the desired config."""
+    import psycopg2
+
+    from todo_app.cli.role_config import AppRole
+
+    desired = load_config(config)
+
+    if app_name:
+        sp_id = _resolve_app_sp_id(app_name)
+        if sp_id:
+            desired.apps.append(AppRole(name=sp_id, access=AccessLevel.readwrite))
+
+    conn = get_pg_connection()
+    conn.autocommit = True
+    try:
+        with conn.cursor() as cur:
+            live = query_live_roles(cur)
+            role_diff = compute_diff(desired, live)
+
+            if not role_diff.has_changes:
+                print("No changes detected.")
+                return
+
+            print("Changes detected:\n")
+            print(format_diff(role_diff))
+
+            if dry_run:
+                print("\nDry run — no changes applied.")
+                return
+
+            print("\nApplying changes...\n")
+            cur.execute("CREATE EXTENSION IF NOT EXISTS databricks_auth")
+
+            # Create new roles
+            for entry in role_diff.to_create:
+                role = _quote_role(entry.role_name)
+                if entry.role_type == "app":
+                    ensure_sp_role(cur, entry.role_name)
+                else:
+                    ensure_role(cur, entry.role_name)
+
+                template = (
+                    SQL_GRANT_READONLY
+                    if entry.desired_access == AccessLevel.readonly
+                    else SQL_GRANT_READWRITE
+                )
+                cur.execute(template.format(role=role))
+                print(f"  + Granted {entry.desired_access.value} to {entry.role_name}")
+
+                try:
+                    cur.execute(SQL_GRANT_TO_AUTHENTICATOR.format(role=role))
+                    print(f"  + Granted Data API access to {entry.role_name}")
+                except (
+                    psycopg2.errors.UndefinedObject,
+                    psycopg2.errors.InsufficientPrivilege,
+                ):
+                    print("  ! Authenticator grant skipped")
+
+            # Change access level (upgrade/downgrade)
+            for entry in role_diff.to_change:
+                role = _quote_role(entry.role_name)
+
+                if entry.action == "downgrade":
+                    cur.execute(SQL_REVOKE_WRITE.format(role=role))
+                    cur.execute(SQL_GRANT_READONLY.format(role=role))
+                    print(f"  ~ Downgraded {entry.role_name} to readonly")
+                else:
+                    cur.execute(SQL_GRANT_READWRITE.format(role=role))
+                    print(f"  ~ Upgraded {entry.role_name} to readwrite")
+
+                if entry.needs_authenticator:
+                    try:
+                        cur.execute(SQL_GRANT_TO_AUTHENTICATOR.format(role=role))
+                        print(f"  + Granted Data API access to {entry.role_name}")
+                    except (
+                        psycopg2.errors.UndefinedObject,
+                        psycopg2.errors.InsufficientPrivilege,
+                    ):
+                        print("  ! Authenticator grant skipped")
+
+            # Fix missing authenticator grants
+            for entry in role_diff.authenticator_grants:
+                role = _quote_role(entry.role_name)
+                try:
+                    cur.execute(SQL_GRANT_TO_AUTHENTICATOR.format(role=role))
+                    print(f"  + Granted Data API access to {entry.role_name}")
+                except (
+                    psycopg2.errors.UndefinedObject,
+                    psycopg2.errors.InsufficientPrivilege,
+                ):
+                    print("  ! Authenticator grant skipped")
+
+            # Revoke roles not in config (only with --revoke)
+            if revoke and role_diff.to_revoke:
+                for entry in role_diff.to_revoke:
+                    role = _quote_role(entry.role_name)
+                    cur.execute(SQL_REVOKE_WRITE.format(role=role))
+                    cur.execute(
+                        f"REVOKE SELECT ON ALL TABLES IN SCHEMA public FROM {role};"
+                        f"REVOKE USAGE ON ALL SEQUENCES IN SCHEMA public FROM {role};"
+                        f"REVOKE USAGE ON SCHEMA public FROM {role};"
+                        f"REVOKE CONNECT ON DATABASE databricks_postgres FROM {role};"
+                    )
+                    print(f"  - Revoked all grants from {entry.role_name}")
+            elif role_diff.to_revoke:
+                print(
+                    f"\n{len(role_diff.to_revoke)} role(s) not in config "
+                    "(pass --revoke to remove them)."
+                )
+
     finally:
         conn.close()
 

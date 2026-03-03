@@ -52,8 +52,8 @@ jobs:
       - name: Deploy bundle (creates app + service principal)
         run: databricks bundle deploy -t prod
 
-      - name: Provision database roles
-        run: uv run lbctl roles provision --app lakebase-todo-app-prod --db-access scripts/db_access.json
+      - name: Sync database roles
+        run: uv run lbctl roles sync --config scripts/roles.yml --app lakebase-todo-app-prod
 
       - name: Run database migrations
         run: uv run alembic upgrade head

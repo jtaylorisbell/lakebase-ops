@@ -1,0 +1,3 @@
+users:
+  - email: taylor.isbell@databricks.com
+    access: readwrite

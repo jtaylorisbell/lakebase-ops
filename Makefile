@@ -33,10 +33,16 @@ dab-deploy: dab-validate
 	databricks bundle deploy
 
 # ── Roles ────────────────────────────────────────
-.PHONY: roles-app
+.PHONY: roles-app roles-diff roles-sync
 
 roles-app:
 	uv run lbctl roles provision --app $(APP_NAME)
+
+roles-diff:
+	uv run lbctl roles diff --config scripts/roles.yml
+
+roles-sync:
+	uv run lbctl roles sync --config scripts/roles.yml
 
 # ── Migrations ───────────────────────────────────
 .PHONY: migrate migrate-status migrate-downgrade migrate-new
