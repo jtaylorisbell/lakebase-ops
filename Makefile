@@ -70,7 +70,7 @@ branch-create:
 	databricks postgres create-branch projects/$(PROJECT) $(NAME) \
 		--json '{"spec": {"source_branch": "projects/$(PROJECT)/branches/production", "no_expiry": true}}'
 	databricks postgres create-endpoint projects/$(PROJECT)/branches/$(NAME) primary \
-		--json '{"spec": {"endpoint_type": "ENDPOINT_TYPE_READ_WRITE", "autoscaling_limit_min_cu": 0.5, "autoscaling_limit_max_cu": 2.0, "suspend_timeout_duration": 600}}'
+		--json '{"spec": {"endpoint_type": "ENDPOINT_TYPE_READ_WRITE", "autoscaling_limit_min_cu": 0.5, "autoscaling_limit_max_cu": 2.0, "suspend_timeout_duration": "600s"}}'
 
 branch-reset:
 	databricks api post /api/2.0/postgres/projects/$(PROJECT)/branches/$(NAME):reset --json '{}'
