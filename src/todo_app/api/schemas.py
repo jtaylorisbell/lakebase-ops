@@ -28,7 +28,7 @@ class TodoResponse(BaseModel):
     description: str | None
     completed: bool
     priority: Priority
-    due_date: date | None
+    due_date: date | None = None
     user_email: str | None
     created_at: datetime
     updated_at: datetime
