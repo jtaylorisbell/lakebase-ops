@@ -46,7 +46,7 @@ uv run lbctl roles provision --app lakebase-todo-app-dev
 
 - `CONNECT` on `databricks_postgres`
 - `USAGE` (+ `CREATE` for readwrite) on `public` schema
-- `SELECT, INSERT, UPDATE, DELETE` on all tables (readwrite) or `SELECT` only (readonly)
+- `ALL PRIVILEGES` on all tables (readwrite) or `SELECT` only (readonly)
 - `USAGE, SELECT` on all sequences
 - `ALTER DEFAULT PRIVILEGES` for future objects
 - `GRANT TO authenticator` for Data API access (if enabled)

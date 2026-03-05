@@ -6,6 +6,7 @@ export interface Todo {
   description: string | null;
   completed: boolean;
   priority: Priority;
+  due_date: string | null;
   user_email: string | null;
   created_at: string;
   updated_at: string;
@@ -20,6 +21,7 @@ export interface CreateTodoRequest {
   title: string;
   description?: string | null;
   priority?: Priority;
+  due_date?: string | null;
 }
 
 export interface UpdateTodoRequest {
@@ -27,6 +29,7 @@ export interface UpdateTodoRequest {
   description?: string | null;
   completed?: boolean;
   priority?: Priority;
+  due_date?: string | null;
 }
 
 export interface TodoStats {

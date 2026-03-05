@@ -12,8 +12,9 @@ import {
   Sparkles,
   BarChart3,
   Flag,
+  Calendar,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, isPast, isToday } from 'date-fns';
 import { api } from './api/client';
 import type { CreateTodoRequest, Priority, Todo } from './types/api';
 
@@ -106,6 +107,20 @@ function TodoItem({ todo }: { todo: Todo }) {
           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${PRIORITY_BADGE_CLASSES[todo.priority]}`}>
             {capitalize(todo.priority)}
           </span>
+          {todo.due_date && (
+            <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+              todo.completed
+                ? 'bg-[var(--bg-elevated)] text-[var(--text-muted)]'
+                : isPast(new Date(todo.due_date + 'T00:00:00')) && !isToday(new Date(todo.due_date + 'T00:00:00'))
+                  ? 'bg-[var(--accent-danger-dim)] text-[var(--accent-danger)]'
+                  : isToday(new Date(todo.due_date + 'T00:00:00'))
+                    ? 'bg-[var(--accent-warning-dim)] text-[var(--accent-warning)]'
+                    : 'bg-[var(--bg-elevated)] text-[var(--text-muted)]'
+            }`}>
+              <Calendar className="h-3 w-3" />
+              {format(new Date(todo.due_date + 'T00:00:00'), 'MMM d')}
+            </span>
+          )}
         </div>
       </div>
 
@@ -125,6 +140,7 @@ function AddTodoForm() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('medium');
+  const [dueDate, setDueDate] = useState('');
   const [showDetails, setShowDetails] = useState(false);
 
   const createMutation = useMutation({
@@ -134,6 +150,7 @@ function AddTodoForm() {
       setTitle('');
       setDescription('');
       setPriority('medium');
+      setDueDate('');
       setShowDetails(false);
     },
   });
@@ -145,6 +162,7 @@ function AddTodoForm() {
       title: title.trim(),
       description: description.trim() || undefined,
       priority,
+      due_date: dueDate || undefined,
     });
   };
 
@@ -202,6 +220,25 @@ function AddTodoForm() {
                 {capitalize(p)}
               </button>
             ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-[var(--text-muted)]" />
+            <span className="text-sm text-[var(--text-secondary)]">Due date:</span>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="px-3 py-1 rounded-lg text-xs font-medium bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-primary)]"
+            />
+            {dueDate && (
+              <button
+                type="button"
+                onClick={() => setDueDate('')}
+                className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+              >
+                Clear
+              </button>
+            )}
           </div>
         </div>
       )}

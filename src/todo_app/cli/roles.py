@@ -23,15 +23,15 @@ GRANT CONNECT ON DATABASE databricks_postgres TO {role};
 GRANT USAGE  ON SCHEMA public TO {role};
 GRANT CREATE ON SCHEMA public TO {role};
 
--- Existing objects
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO {role};
-GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO {role};
+-- Existing objects (ALL includes DDL for migrations on dev branches)
+GRANT ALL ON ALL TABLES    IN SCHEMA public TO {role};
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO {role};
 
 -- Future objects
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES    TO {role};
+    GRANT ALL ON TABLES    TO {role};
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-    GRANT USAGE, SELECT                  ON SEQUENCES TO {role};
+    GRANT ALL ON SEQUENCES TO {role};
 """
 
 SQL_GRANT_READONLY = """

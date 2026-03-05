@@ -1,6 +1,6 @@
 """Pydantic request/response schemas for Todo App API."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
@@ -11,6 +11,7 @@ class CreateTodoRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
     description: str | None = Field(default=None, max_length=2000)
     priority: Priority = Priority.MEDIUM
+    due_date: date | None = None
 
 
 class UpdateTodoRequest(BaseModel):
@@ -18,6 +19,7 @@ class UpdateTodoRequest(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     completed: bool | None = None
     priority: Priority | None = None
+    due_date: date | None = None
 
 
 class TodoResponse(BaseModel):
@@ -26,6 +28,7 @@ class TodoResponse(BaseModel):
     description: str | None
     completed: bool
     priority: Priority
+    due_date: date | None
     user_email: str | None
     created_at: datetime
     updated_at: datetime

@@ -71,6 +71,7 @@ async def create_todo(body: CreateTodoRequest, request: Request) -> TodoResponse
         title=body.title,
         description=body.description,
         priority=body.priority.value,
+        due_date=body.due_date.isoformat() if body.due_date else None,
         user_email=user.email,
         user_token=token,
     )
@@ -115,6 +116,7 @@ async def update_todo(
         description=body.description,
         completed=body.completed,
         priority=body.priority.value if body.priority else None,
+        due_date=body.due_date.isoformat() if body.due_date else None,
         user_token=token,
     )
     if todo is None:

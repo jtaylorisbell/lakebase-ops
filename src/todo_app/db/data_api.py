@@ -69,6 +69,7 @@ class DataAPIClient:
         title: str,
         description: str | None = None,
         priority: str = "medium",
+        due_date: str | None = None,
         user_email: str,
         user_token: str | None = None,
     ) -> dict:
@@ -79,6 +80,8 @@ class DataAPIClient:
         }
         if description is not None:
             payload["description"] = description
+        if due_date is not None:
+            payload["due_date"] = due_date
 
         resp = self._client.post(
             f"{self._base_url}/public/todos",
@@ -135,6 +138,7 @@ class DataAPIClient:
         description: str | None = None,
         completed: bool | None = None,
         priority: str | None = None,
+        due_date: str | None = None,
         user_token: str | None = None,
     ) -> dict | None:
         payload: dict = {}
@@ -146,6 +150,8 @@ class DataAPIClient:
             payload["completed"] = completed
         if priority is not None:
             payload["priority"] = priority
+        if due_date is not None:
+            payload["due_date"] = due_date
 
         if not payload:
             return self.get_todo(todo_id, user_token=user_token)
