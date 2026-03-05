@@ -3,6 +3,7 @@ resources:
     todo_app:
       name: lakebase-todo-app-${bundle.target}
       description: A beautiful To-Do list app powered by Lakebase Autoscaling
+      budget_policy_id: ""
       source_code_path: ../
 
       # API scopes for database credential generation
