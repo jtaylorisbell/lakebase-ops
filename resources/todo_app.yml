@@ -5,6 +5,12 @@ resources:
       description: A beautiful To-Do list app powered by Lakebase Autoscaling
       source_code_path: ../
 
+      permissions:
+        - user_name: taylor.isbell@databricks.com
+          level: CAN_MANAGE
+        - service_principal_name: 4acb06a1-4088-41e2-ac3a-1547c840816f
+          level: CAN_MANAGE
+
       # API scopes for database credential generation
       user_api_scopes:
         - sql
