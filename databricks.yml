@@ -36,9 +36,3 @@ sync:
 targets:
   dev:
     default: true
-    workspace:
-      root_path: /Workspace/.bundle/${bundle.name}/dev
-
-  prod:
-    workspace:
-      root_path: /Workspace/.bundle/${bundle.name}/prod
