@@ -29,7 +29,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: uv sync --extra dev
+      - run: uv sync
       - run: uv run ruff check
       - run: uv run pytest
 
@@ -40,25 +40,16 @@ jobs:
     environment: prod
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       - uses: databricks/setup-cli@main
-      - run: uv sync --extra migrations
+        with:
+          version: 0.297.2
 
       - run: databricks bundle validate -t prod
 
-      - name: Deploy bundle (creates app + service principal)
+      - name: Deploy bundle
         run: databricks bundle deploy -t prod
 
-      - name: Sync database roles
-        run: uv run lbctl roles sync --config db/roles.yml --app lakebase-todo-app-prod
-
-      - name: Run database migrations
-        run: uv run alembic upgrade head
-
-      - name: Deploy app source code
+      - name: Deploy app source
         run: databricks bundle run -t prod todo_app
 
   create-release:

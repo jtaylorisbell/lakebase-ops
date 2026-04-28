@@ -1,84 +1,59 @@
 ---
 name: roles-manage
-description: Manage Postgres roles, permissions, and Data API access via lbctl.
-trigger: User asks about role management, Postgres permissions, Data API access, grants, lbctl, or database user provisioning.
+description: Manage Postgres roles for the Lakebase Todo App via the Databricks CLI.
+trigger: User asks about Postgres roles, grants, or database access for the Todo App.
 ---
 
-# Role Management
+# Postgres Role Management
 
-Manage database-layer Postgres roles using `lbctl` (Typer CLI). Source of truth is `db/roles.yml`. Full CLI reference: `src/todo_app/cli/README.md`.
+Roles are managed directly with `databricks postgres` — there is no custom CLI or YAML config.
 
-## Operations
+The App SP gets `CAN_CONNECT_AND_CREATE` automatically through the `postgres` resource declared in `resources/todo_app.yml`, so the App never needs a manual role.
 
-### Show drift (diff)
-
-Compare `db/roles.yml` against live Postgres — exits code 1 if drifted (CI-friendly):
+The only thing that needs explicit role provisioning is a developer's OAuth role on a dev branch. `make branch-create` does this automatically as part of branch creation, but the underlying command is:
 
 ```bash
-uv run lbctl roles diff --config db/roles.yml
+databricks postgres create-role projects/todo-app/branches/<branch> \
+  --role-id <role-id> \
+  --json '{"spec": {"identity_type": "USER", "postgres_role": "<email>"}}'
 ```
 
-Or: `make roles-diff`
+## Common operations
 
-### Sync roles
-
-Apply `db/roles.yml` to live Postgres — creates missing roles, upgrades/downgrades permissions, adds authenticator grants:
+### Provision your own role on an existing branch
 
 ```bash
-uv run lbctl roles sync --config db/roles.yml
+make role-create BRANCH=dev-<name>
 ```
 
-With app service principal:
-```bash
-uv run lbctl roles sync --config db/roles.yml --app lakebase-todo-app-dev
-```
+`EMAIL` and `ROLE_ID` default to your `git config user.email`.
 
-Preview without applying:
-```bash
-uv run lbctl roles sync --config db/roles.yml --dry-run
-```
-
-Revoke roles not in config:
-```bash
-uv run lbctl roles sync --config db/roles.yml --revoke
-```
-
-Or: `make roles-sync`
-
-### Add a user to config
-
-Edit `db/roles.yml` — append under `users:`:
-
-```yaml
-users:
-  - email: existing@databricks.com
-    access: readwrite
-  - email: NEW_EMAIL
-    access: readwrite  # or readonly
-```
-
-Validate no duplicate emails. After editing, run `roles sync` or push to main for CI.
-
-### Ad-hoc provisioning
-
-One-off grants without editing config:
+### List existing roles on a branch
 
 ```bash
-# Developer (read-write)
-uv run lbctl roles provision --engineers dev@co.com
-
-# Read-only
-uv run lbctl roles provision --readonly analyst@co.com
-
-# App service principal
-uv run lbctl roles provision --app lakebase-todo-app-dev
+databricks postgres list-roles projects/todo-app/branches/<branch>
 ```
 
-## What each role gets
+### Inspect a role
 
-- `CONNECT` on `databricks_postgres`
-- `USAGE` (+ `CREATE` for readwrite) on `public` schema
-- `SELECT, INSERT, UPDATE, DELETE` on all tables (readwrite) or `SELECT` only (readonly)
-- `USAGE, SELECT` on all sequences
-- `ALTER DEFAULT PRIVILEGES` for future objects
-- `GRANT TO authenticator` for Data API access
+```bash
+databricks postgres get-role projects/todo-app/branches/<branch>/roles/<role-id>
+```
+
+### Delete a role
+
+```bash
+databricks postgres delete-role projects/todo-app/branches/<branch>/roles/<role-id>
+```
+
+## What developers can do once their role exists
+
+- Connect to their dev branch as themselves over OAuth
+- Run `alembic upgrade head` (creates the `todo_app` schema, owned by them)
+- Read/write everything in that schema
+
+The production branch is owned by the App SP — humans don't need roles there for day-to-day work.
+
+## Reference
+
+- [docs: Lakebase Postgres roles](https://docs.databricks.com/aws/en/oltp/projects/postgres-roles)

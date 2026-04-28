@@ -50,17 +50,10 @@ frontend/dist/
 htmlcov/
 .pytest_cache/
 
-# uv
-uv.lock
-
-# Terraform
-terraform/.terraform/
-terraform/*.tfstate*
-
 # Databricks
 .databricks/
 
-.isaac/worktree_pool/
-
 # Drafts
 BLOG.md
+
+.isaac/worktree_pool/

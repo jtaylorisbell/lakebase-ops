@@ -6,7 +6,11 @@ trigger: User asks about migrations, schema changes, alembic, or database schema
 
 # Database Migrations
 
-Alembic migrations targeting a Lakebase Postgres branch. The `LAKEBASE_BRANCH_ID` env var controls which branch is targeted. If unset, auto-detection derives it from the authenticated user's email (`dev-{first-last}`).
+Alembic migrations target a Lakebase Postgres branch. The deployed App runs `alembic upgrade head` automatically on startup (see `app.yaml`), so production usually doesn't need manual intervention. Local dev branches need manual migration runs.
+
+`LAKEBASE_BRANCH_ID` controls which branch is targeted. When unset, the app derives it from the caller's identity (`production` for SP, `dev-{username}` for users).
+
+Migrations create the `todo_app` schema and tables under it. The role running the migration becomes the owner of the schema, so on production the App SP owns everything (required by `CAN_CONNECT_AND_CREATE`).
 
 ## Operations
 
@@ -16,15 +20,7 @@ Alembic migrations targeting a Lakebase Postgres branch. The `LAKEBASE_BRANCH_ID
 LAKEBASE_BRANCH_ID={branch} uv run alembic upgrade head
 ```
 
-For the production branch:
-```bash
-LAKEBASE_BRANCH_ID=production uv run alembic upgrade head
-```
-
-Or use the Makefile shortcut (uses `BRANCH` from `.env` or defaults to `production`):
-```bash
-make migrate
-```
+Or `make migrate` (defaults to `BRANCH=production` from the Makefile).
 
 ### Check migration status
 
@@ -32,33 +28,27 @@ make migrate
 LAKEBASE_BRANCH_ID={branch} uv run alembic current
 ```
 
-Or: `make migrate-status`
+Or `make migrate-status`.
 
 ### Create a new migration
 
-Without autogenerate (empty template):
 ```bash
-uv run alembic revision -m "description of change"
+uv run alembic revision -m "description"                                 # empty template
+LAKEBASE_BRANCH_ID={branch} uv run alembic revision --autogenerate -m "…" # diff against models
 ```
 
-With autogenerate (compares models to DB — needs a running branch):
-```bash
-LAKEBASE_BRANCH_ID={branch} uv run alembic revision --autogenerate -m "description of change"
-```
+Migration files land in `alembic/versions/`.
 
-Migration files are created in `alembic/versions/`.
-
-### Downgrade (rollback last migration)
+### Downgrade
 
 ```bash
 LAKEBASE_BRANCH_ID={branch} uv run alembic downgrade -1
 ```
 
-Or: `make migrate-downgrade`
+Or `make migrate-downgrade`.
 
-## Key Details
+## Key details
 
-- `alembic/env.py` resolves DB credentials dynamically via Databricks SDK OAuth
-- Always specify `LAKEBASE_BRANCH_ID` when targeting a non-default branch
-- Autogenerate requires a live DB connection, so set the branch target
-- Migration dependency chain is in the `revision` and `down_revision` fields of each migration file
+- `alembic/env.py` resolves credentials via the Databricks SDK and creates the `todo_app` schema before running migrations
+- The `alembic_version` table also lives in `todo_app` so the App SP owns it
+- New tables in models must include `{"schema": SCHEMA}` in `__table_args__` (see `src/todo_app/db/schemas.py`)

@@ -3,9 +3,11 @@
 from pathlib import Path
 
 import structlog
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from todo_app import __version__
 from todo_app.api.schemas import (
@@ -18,14 +20,15 @@ from todo_app.api.schemas import (
     UpdateTodoRequest,
 )
 from todo_app.api.user import get_current_user
-from todo_app.db.data_api import get_data_api
+from todo_app.db import crud
+from todo_app.db.session import get_session
 
 logger = structlog.get_logger()
 
 
 app = FastAPI(
     title="Lakebase Todo App API",
-    description="A beautiful To-Do list powered by Databricks Apps and Lakebase",
+    description="A To-Do list powered by Databricks Apps and Lakebase",
     version=__version__,
 )
 
@@ -39,9 +42,13 @@ app.add_middleware(
 
 
 @app.get("/api/health", response_model=HealthResponse)
-async def health() -> HealthResponse:
-    api = get_data_api()
-    db_status = "connected" if api.health_check() else "disconnected"
+async def health(session: Session = Depends(get_session)) -> HealthResponse:
+    try:
+        session.execute(text("SELECT 1"))
+        db_status = "connected"
+    except Exception as exc:
+        logger.error("health_check_failed", error=str(exc))
+        db_status = "disconnected"
     return HealthResponse(status="ok", version=__version__, database=db_status)
 
 
@@ -57,97 +64,89 @@ async def get_me(request: Request) -> CurrentUserResponse:
 
 
 @app.post("/api/todos", response_model=TodoResponse, status_code=201)
-async def create_todo(body: CreateTodoRequest, request: Request) -> TodoResponse:
+async def create_todo(
+    body: CreateTodoRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> TodoResponse:
     user = get_current_user(request)
-    api = get_data_api()
-    todo = api.create_todo(
+    todo = crud.create_todo(
+        session,
         title=body.title,
         description=body.description,
         priority=body.priority.value,
-        due_date=body.due_date.isoformat() if body.due_date else None,
+        due_date=body.due_date,
         user_email=user.email,
     )
-    return TodoResponse(**todo)
+    return TodoResponse.model_validate(todo)
 
 
 @app.get("/api/todos", response_model=TodoListResponse)
 async def list_todos(
+    request: Request,
     completed: bool | None = None,
     limit: int = 100,
-    request: Request = None,
+    session: Session = Depends(get_session),
 ) -> TodoListResponse:
     user = get_current_user(request)
-    api = get_data_api()
-    todos = api.list_todos(user_email=user.email, completed=completed, limit=limit)
+    todos = crud.list_todos(session, user_email=user.email, completed=completed, limit=limit)
     return TodoListResponse(
-        todos=[TodoResponse(**t) for t in todos],
+        todos=[TodoResponse.model_validate(t) for t in todos],
         total=len(todos),
     )
 
 
 @app.get("/api/todos/{todo_id}", response_model=TodoResponse)
-async def get_todo(todo_id: str) -> TodoResponse:
-    api = get_data_api()
-    todo = api.get_todo(todo_id)
+async def get_todo(todo_id: str, session: Session = Depends(get_session)) -> TodoResponse:
+    todo = crud.get_todo(session, todo_id)
     if todo is None:
         raise HTTPException(status_code=404, detail="Todo not found")
-    return TodoResponse(**todo)
+    return TodoResponse.model_validate(todo)
 
 
 @app.put("/api/todos/{todo_id}", response_model=TodoResponse)
-async def update_todo(todo_id: str, body: UpdateTodoRequest) -> TodoResponse:
-    api = get_data_api()
-    todo = api.update_todo(
+async def update_todo(
+    todo_id: str,
+    body: UpdateTodoRequest,
+    session: Session = Depends(get_session),
+) -> TodoResponse:
+    todo = crud.update_todo(
+        session,
         todo_id,
         title=body.title,
         description=body.description,
         completed=body.completed,
         priority=body.priority.value if body.priority else None,
-        due_date=body.due_date.isoformat() if body.due_date else None,
+        due_date=body.due_date,
     )
     if todo is None:
         raise HTTPException(status_code=404, detail="Todo not found")
-    return TodoResponse(**todo)
+    return TodoResponse.model_validate(todo)
 
 
 @app.patch("/api/todos/{todo_id}/toggle", response_model=TodoResponse)
-async def toggle_todo(todo_id: str) -> TodoResponse:
-    api = get_data_api()
-    todo = api.toggle_todo(todo_id)
+async def toggle_todo(todo_id: str, session: Session = Depends(get_session)) -> TodoResponse:
+    todo = crud.toggle_todo(session, todo_id)
     if todo is None:
         raise HTTPException(status_code=404, detail="Todo not found")
-    return TodoResponse(**todo)
+    return TodoResponse.model_validate(todo)
 
 
 @app.delete("/api/todos/{todo_id}", status_code=204)
-async def delete_todo(todo_id: str):
-    api = get_data_api()
-    if not api.delete_todo(todo_id):
+async def delete_todo(todo_id: str, session: Session = Depends(get_session)) -> None:
+    if not crud.delete_todo(session, todo_id):
         raise HTTPException(status_code=404, detail="Todo not found")
 
 
 @app.get("/api/stats", response_model=TodoStatsResponse)
-async def get_stats(request: Request) -> TodoStatsResponse:
+async def get_stats(
+    request: Request,
+    session: Session = Depends(get_session),
+) -> TodoStatsResponse:
     user = get_current_user(request)
-    api = get_data_api()
-    stats = api.get_stats(user_email=user.email)
-    return TodoStatsResponse(**stats)
+    return TodoStatsResponse(**crud.get_stats(session, user_email=user.email))
 
 
-def _find_project_root() -> Path:
-    from_main = Path(__file__).parent.parent.parent.parent
-    if (from_main / "frontend").exists():
-        return from_main
-    from_cwd = Path.cwd()
-    if (from_cwd / "frontend").exists():
-        return from_cwd
-    return from_main
-
-
-PROJECT_ROOT = _find_project_root()
-
-frontend_dist = PROJECT_ROOT / "frontend" / "dist"
-if frontend_dist.exists():
-    app.mount(
-        "/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend"
-    )
+_FRONTEND_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"
+if _FRONTEND_DIST.exists():
+    app.mount("/", StaticFiles(directory=str(_FRONTEND_DIST), html=True), name="frontend")

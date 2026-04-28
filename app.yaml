@@ -1,13 +1,12 @@
-# Databricks Apps configuration for Lakebase Todo App
-# https://docs.databricks.com/dev-tools/databricks-apps/app-runtime
+# Databricks Apps runtime config.
+#
+# Migrations run on startup as the App service principal — the SP owns the
+# resulting schema/tables, which is required by CAN_CONNECT_AND_CREATE.
 
 command:
-  - uvicorn
-  - app:app
-  - --host
-  - "0.0.0.0"
-  - --port
-  - "8000"
+  - bash
+  - -c
+  - "uv run alembic upgrade head && uv run uvicorn app:app --host 0.0.0.0 --port 8000"
 
 env:
   - name: LOG_LEVEL

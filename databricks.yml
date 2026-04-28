@@ -1,19 +1,13 @@
-# Databricks Asset Bundle configuration for Lakebase Todo App
+# Databricks Asset Bundle for the Lakebase Todo App.
 #
-# Deploy with: databricks bundle deploy -t <target>
-#
-# Targets:
-#   - dev: Development environment
-#   - prod: Production environment
+# Deploy:  databricks bundle deploy -t {dev|prod}
 
 bundle:
   name: lakebase-todo-app
 
-# Include resource definitions from the resources directory
 include:
   - resources/*.yml
 
-# Workspace sync configuration
 sync:
   exclude:
     - node_modules/
@@ -24,18 +18,20 @@ sync:
     - "*.egg-info/"
     - .env
     - .env.local
-    - uv.lock
 
-# Target environments
 targets:
   dev:
     default: true
     resources:
-      apps:
-        todo_app:
+      postgres_projects:
+        todo_app_project:
           permissions:
-            - service_principal_name: 4acb06a1-4088-41e2-ac3a-1547c840816f
+            - user_name: taylor.isbell@databricks.com
               level: CAN_MANAGE
+
+  prod:
+    mode: production
+    resources:
       postgres_projects:
         todo_app_project:
           permissions:

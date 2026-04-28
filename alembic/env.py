@@ -1,76 +1,45 @@
-"""Alembic environment configuration.
-
-Builds the database URL dynamically using LakebaseSettings and OAuthTokenManager
-so that migrations work with Databricks OAuth — no hardcoded credentials.
-"""
+"""Alembic environment — resolves Lakebase OAuth credentials via Databricks SDK."""
 
 from __future__ import annotations
 
 import sys
+from logging.config import fileConfig
 from pathlib import Path
-from urllib.parse import quote_plus
 
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import create_engine, pool, text
 
 from alembic import context
 
-# Ensure src/ is importable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from todo_app.config import LakebaseSettings  # noqa: E402
+from todo_app.config import SCHEMA, LakebaseSettings  # noqa: E402
 from todo_app.db.schemas import Base  # noqa: E402
 
 config = context.config
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
 target_metadata = Base.metadata
 
 
-def _get_settings() -> LakebaseSettings:
-    return LakebaseSettings()
-
-
-def _build_url(lb: LakebaseSettings) -> str:
-    """Build a SQLAlchemy database URL from LakebaseSettings + OAuth."""
-    host = lb.get_host()
-    user = lb.get_user()
-    password = lb.get_password()
-    return (
-        f"postgresql+psycopg2://{quote_plus(user)}:{quote_plus(password)}"
-        f"@{host}:5432/{lb.database}"
-        f"?sslmode=require&connect_timeout=30"
-    )
+def run_migrations_online() -> None:
+    settings = LakebaseSettings()
+    engine = create_engine(settings.get_database_url(), poolclass=pool.NullPool)
+    with engine.connect() as connection:
+        connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{SCHEMA}"'))
+        connection.commit()
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            version_table_schema=SCHEMA,
+            include_schemas=True,
+        )
+        with context.begin_transaction():
+            context.run_migrations()
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode — emits SQL to stdout."""
-    lb = _get_settings()
-    url = _build_url(lb)
-    context.configure(
-        url=url,
-        target_metadata=target_metadata,
-        literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
-    )
-    with context.begin_transaction():
-        context.run_migrations()
-
-
-def run_migrations_online() -> None:
-    """Run migrations in 'online' mode — connects to the database."""
-    lb = _get_settings()
-
-    cfg = config.get_section(config.config_ini_section, {})
-    cfg["sqlalchemy.url"] = _build_url(lb)
-
-    connectable = engine_from_config(
-        cfg,
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
-
-    with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
-        with context.begin_transaction():
-            context.run_migrations()
+    raise RuntimeError("Offline migrations are not supported — credentials require live SDK auth.")
 
 
 if context.is_offline_mode():
