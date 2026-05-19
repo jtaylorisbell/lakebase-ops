@@ -49,5 +49,5 @@ make branch-list
 
 - Branch naming: `dev-{first-last}` derived from email prefix (`taylor.isbell@…` → `dev-taylor-isbell`)
 - `production` is the default and should never be deleted or reset manually
-- `LAKEBASE_BRANCH_ID` env var targets a specific branch for migrations and the backend
+- `LAKEBASE_BRANCH_ID` env var targets a specific branch for migrations and the backend. Update `.env` to your new branch after creating it.
 - `.env` should have `DATABRICKS_CONFIG_PROFILE=todo-app-dev`

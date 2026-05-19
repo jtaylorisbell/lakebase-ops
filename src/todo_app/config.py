@@ -53,26 +53,17 @@ class LakebaseSettings(BaseSettings):
         extra="ignore",
     )
 
-    # No default — must come from LAKEBASE_PROJECT_ID. The deployed app gets
-    # this via the bundle's app.config.env block; local dev sets it in .env.
+    # No defaults for project_id / branch_id — both must be set explicitly.
+    # The deployed app gets them via the bundle's app.config.env block;
+    # local dev sets them in .env.
     project_id: str
-    branch_id: str = ""
+    branch_id: str
     endpoint_id: str = "primary"
     database: str = "databricks_postgres"
 
-    def get_branch_id(self) -> str:
-        """Resolve the branch — explicit env wins, then SP→production, user→dev-{username}."""
-        if self.branch_id:
-            return self.branch_id
-        w = _workspace_client()
-        if w.config.client_id or w.config.azure_client_id:
-            return "production"
-        username = w.current_user.me().user_name.split("@")[0].replace(".", "-").lower()
-        return f"dev-{username}"
-
     def _endpoint_name(self) -> str:
         return (
-            f"projects/{self.project_id}/branches/{self.get_branch_id()}"
+            f"projects/{self.project_id}/branches/{self.branch_id}"
             f"/endpoints/{self.endpoint_id}"
         )
 

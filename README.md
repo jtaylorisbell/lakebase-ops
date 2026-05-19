@@ -114,7 +114,7 @@ make migrate-status
 make migrate-new                        # new empty revision
 ```
 
-`LAKEBASE_BRANCH_ID` overrides which branch the alembic + backend processes target. When unset, the app derives it from the caller's identity (SP → `production`, user → `dev-{username}`).
+`LAKEBASE_BRANCH_ID` controls which branch the alembic + backend processes target. Set it in `.env` for local dev; the deployed app gets `LAKEBASE_BRANCH_ID=production` injected from the bundle's `var.lakebase_branch`.
 
 ## Deployment
 
