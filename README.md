@@ -122,16 +122,6 @@ CI uses a Databricks-managed service principal (`DATABRICKS_CLIENT_ID` / `DATABR
 - **deploy-dev.yml** — every push to `main` runs `databricks bundle deploy -t dev` then `databricks bundle run -t dev todo_app`. Migrations run inside the App on startup.
 - **release-prod.yml** — manual, runs tests then deploys to `prod` and tags a GitHub release.
 
-## Bootstrapping the Lakebase resource path
-
-The first time you deploy the bundle, you need the auto-generated Lakebase database resource path. After the initial `databricks bundle deploy` succeeds (which creates the project), look it up:
-
-```bash
-databricks api get /api/2.0/postgres/projects/todo-app/branches/production/databases
-```
-
-Copy the `name` field (e.g. `projects/todo-app/branches/production/databases/db-xxxx-xxxxxxxxxx`) into `resources/todo_app.yml` (replace the `REPLACE_ME` placeholder), then redeploy. The App SP grant is now wired up and won't need to change again.
-
 ## References
 
 - [Lakebase project Postgres roles](https://docs.databricks.com/aws/en/oltp/projects/postgres-roles)

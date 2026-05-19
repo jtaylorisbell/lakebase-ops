@@ -5,19 +5,13 @@ resources:
       description: A To-Do list app powered by Databricks Apps and Lakebase Autoscaling
       source_code_path: ../
 
-      # Granting CAN_CONNECT_AND_CREATE on the production branch lets the App SP
-      # connect to Postgres and create its own schema/tables. The App SP only
-      # has read/write access to objects it creates, so all schema and table
-      # creation lives in alembic migrations that run at app startup.
-      #
-      # NOTE: `database` is the auto-generated database resource path
-      # (projects/{project}/branches/{branch}/databases/{db-id}). Look it up after
-      # the first bundle deploy with:
-      #   databricks api get /api/2.0/postgres/projects/todo-app/branches/production/databases
-      # then paste it below and redeploy.
+      # CAN_CONNECT_AND_CREATE lets the App SP connect to Postgres and create
+      # its own schema/tables. The App SP only has read/write access to objects
+      # it owns, so all schema/table creation lives in alembic migrations that
+      # run at app startup.
       resources:
         - name: postgres
           postgres:
             branch: projects/todo-app/branches/production
-            database: projects/todo-app/branches/production/databases/REPLACE_ME
+            database: projects/todo-app/branches/production/databases/databricks-postgres
             permission: CAN_CONNECT_AND_CREATE
