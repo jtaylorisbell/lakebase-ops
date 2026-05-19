@@ -1,44 +1,34 @@
 [project]
 name = "todo-app"
 version = "0.1.0"
-description = "A beautiful To-Do list app powered by Databricks Apps and Lakebase Autoscaling"
+description = "A To-Do list app powered by Databricks Apps and Lakebase Autoscaling"
 readme = { text = "", content-type = "text/markdown" }
 authors = [
     { name = "Taylor Isbell", email = "taylor.isbell@databricks.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
-    "pydantic>=2.10.0",
-    "pydantic-settings>=2.6.0",
-    "databricks-sdk>=0.40.0",
-    "httpx>=0.28.0",
-    "python-dotenv>=1.0.0",
-    "structlog>=25.5.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.6",
+    "databricks-sdk>=0.40",
+    "python-dotenv>=1.0",
+    "structlog>=25.5",
     "sqlalchemy>=2.0.45",
-    "alembic>=1.14.0",
-    "typer>=0.15.0",
-    "pyyaml>=6.0",
-]
-
-[project.scripts]
-lbctl = "todo_app.cli:app"
-
-[project.optional-dependencies]
-migrations = [
-    "psycopg[binary,pool]>=3.2.0",
-    "psycopg2-binary>=2.9.11",
-]
-dev = [
-    "pytest>=8.3.0",
-    "pytest-asyncio>=0.24.0",
-    "ruff>=0.8.0",
+    "alembic>=1.14",
+    "psycopg[binary]>=3.2",
 ]
 
 [build-system]
 requires = ["uv_build>=0.9.0,<0.10.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
 
 [tool.ruff]
 target-version = "py312"
@@ -48,5 +38,4 @@ line-length = 100
 select = ["E", "F", "I", "N", "W", "UP"]
 
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
 testpaths = ["tests"]

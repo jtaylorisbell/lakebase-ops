@@ -1,53 +1,44 @@
 ---
 name: onboard-developer
-description: Onboard a new developer to the Lakebase Todo App — adds platform permissions and database access.
+description: Onboard a new developer to the Lakebase Todo App — adds platform permissions.
 trigger: User asks to onboard, add, or invite a new developer or team member.
 ---
 
 # Onboard Developer
 
-Add a new developer to the project by editing two config files. CI/CD handles the actual provisioning on push to main.
+Add a new developer by editing `databricks.yml`. CI deploys the platform permission on the next push to `main`. There is no separate database-role config — developers create their own Postgres role when they create a dev branch (`make branch-create`).
 
 ## Steps
 
-1. **Collect info**: Ask for the developer's Databricks email. Ask for access level (`readwrite` or `readonly`, default `readwrite`).
+1. **Collect info**: ask for the developer's Databricks email.
 
-2. **Edit `databricks.yml`** — Add a `permissions:` entry. The block is at the top level of the file:
-
-```yaml
-permissions:
-  - user_name: existing@databricks.com
-    level: CAN_MANAGE
-  # Add new entry here, same indent:
-  - user_name: NEW_EMAIL
-    level: CAN_MANAGE
-```
-
-Validate the email isn't already in the `permissions:` block before adding.
-
-3. **Edit `db/roles.yml`** — Append a user entry under `users:`:
+2. **Edit `databricks.yml`** — append a `user_name` entry under `permissions:` for **each target** (`dev` and `prod`):
 
 ```yaml
-users:
-  - email: existing@databricks.com
-    access: readwrite
-  # Add new entry here:
-  - email: NEW_EMAIL
-    access: readwrite  # or readonly
+targets:
+  dev:
+    resources:
+      postgres_projects:
+        todo_app_project:
+          permissions:
+            - user_name: existing@databricks.com
+              level: CAN_MANAGE
+            - user_name: NEW_EMAIL          # ← add here
+              level: CAN_MANAGE
 ```
 
-Validate the email isn't already in the `users:` list before adding.
+Validate the email isn't already in either target's permissions block.
 
-4. **Summarize changes** — Show what was added to each file. Remind the developer:
-   - Push to `main` for CI to deploy platform permissions (`databricks bundle deploy`) and database roles (`lbctl roles sync`).
-   - After CI completes, the new developer follows the onboarding steps:
-     1. `make branch-create NAME=dev-{first-last}` (derive from email prefix)
-     2. `LAKEBASE_BRANCH_ID=dev-{name} uv run alembic upgrade head`
-     3. Enable Data API on their dev branch endpoint via Lakebase UI
+3. **Summarize and remind**:
+   - Push to `main` for CI to deploy (`databricks bundle deploy -t dev`).
+   - After CI completes, the new dev follows the local-dev steps in `README.md`:
+     1. `databricks auth login --profile todo-app-dev`
+     2. `make branch-create NAME=dev-{first-last}` (also provisions their Postgres role)
+     3. `LAKEBASE_BRANCH_ID=dev-{first-last} uv run alembic upgrade head`
+     4. Start backend + frontend
 
 ## Validation
 
-- No duplicate emails in either file
+- No duplicate emails per target
 - Email format: must contain `@`
-- Access level must be `readwrite` or `readonly`
-- YAML indentation: 2 spaces, list items with `- ` prefix
+- Same email should usually appear in both `dev` and `prod` targets

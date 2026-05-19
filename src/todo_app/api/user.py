@@ -1,10 +1,11 @@
-"""User identification from HTTP headers (Databricks Apps) or environment."""
+"""Identify the current user from Databricks Apps headers (with a local-dev fallback)."""
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 from fastapi import Request
 
-from todo_app.config import get_settings
+from todo_app.config import _workspace_client
 
 
 @dataclass
@@ -25,14 +26,19 @@ class CurrentUser:
         return bool(self.email)
 
 
+@lru_cache(maxsize=1)
+def _local_identity() -> tuple[str | None, str | None]:
+    try:
+        me = _workspace_client().current_user.me()
+        return me.user_name, me.display_name
+    except Exception:
+        return None, None
+
+
 def get_current_user(request: Request) -> CurrentUser:
-    """Extract current user from Databricks Apps headers or env vars."""
     email = request.headers.get("X-Forwarded-Email")
     name = request.headers.get("X-Forwarded-Preferred-Username")
-
     if not email:
-        settings = get_settings()
-        email = settings.user.get_email() or None
-        name = name or settings.user.get_name() or None
-
+        email, fallback_name = _local_identity()
+        name = name or fallback_name
     return CurrentUser(email=email, name=name)

@@ -15,23 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       - uses: databricks/setup-cli@main
         with:
-          version: 0.292.0      
-      - run: uv sync --extra migrations
+          version: 0.297.2
 
       - name: Deploy bundle
         run: databricks bundle deploy -t dev
 
-      - name: Sync database roles
-        run: uv run lbctl roles sync --config db/roles.yml --app lakebase-todo-app-dev
-
-      - name: Run database migrations
-        run: uv run alembic upgrade head
-
-      - name: Deploy app source code
+      - name: Deploy app source
         run: databricks bundle run -t dev todo_app
