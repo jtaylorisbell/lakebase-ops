@@ -22,7 +22,7 @@ uv run uvicorn app:app --host 0.0.0.0 --port 8000
 cd frontend && npm run dev
 ```
 
-Run each in a separate background shell. The backend auto-detects the Lakebase branch from the authenticated user's email. To target a specific branch:
+Run each in a separate background shell. The backend reads `LAKEBASE_BRANCH_ID` from `.env` (typically `dev-{first-last}`). To target a different branch for a one-off run:
 
 ```bash
 LAKEBASE_BRANCH_ID=dev-taylor-isbell uv run uvicorn app:app --host 0.0.0.0 --port 8000
