@@ -53,7 +53,9 @@ class LakebaseSettings(BaseSettings):
         extra="ignore",
     )
 
-    project_id: str = "todo-app-v2"
+    # No default — must come from LAKEBASE_PROJECT_ID. The deployed app gets
+    # this via the bundle's app.config.env block; local dev sets it in .env.
+    project_id: str
     branch_id: str = ""
     endpoint_id: str = "primary"
     database: str = "databricks_postgres"
