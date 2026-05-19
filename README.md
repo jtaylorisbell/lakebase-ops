@@ -57,12 +57,14 @@ resources:
       resources:
         - name: postgres
           postgres:
-            branch: projects/todo-app/branches/production
-            database: projects/todo-app/branches/production/databases/<id>
+            branch: projects/${var.lakebase_project_id}/branches/${var.lakebase_branch}
+            database: projects/${var.lakebase_project_id}/branches/${var.lakebase_branch}/databases/${var.lakebase_database_id}
             permission: CAN_CONNECT_AND_CREATE
 ```
 
-`CAN_CONNECT_AND_CREATE` lets the App SP connect and create new schemas/tables, but only gives it read/write access to objects it owns. So **all schema and table creation is in alembic migrations** that run as the App SP at startup (see `app.yaml`). The App ends up owning the `todo_app` schema and everything in it.
+Project id, branch, and database id are bundle variables defined in `databricks.yml`, so the project name lives in exactly one place and flows into both the resource binding and the app's `LAKEBASE_PROJECT_ID` env var.
+
+`CAN_CONNECT_AND_CREATE` lets the App SP connect and create new schemas/tables, but only gives it read/write access to objects it owns. So **all schema and table creation is in alembic migrations** that run as the App SP at startup (`uv run alembic upgrade head && uv run uvicorn …`, defined inline in `resources/todo_app.yml`). The App ends up owning the `todo_app` schema and everything in it.
 
 For human developers, OAuth Postgres roles are created on-demand with `databricks postgres create-role` (see [Local development](#local-development) below). There is no separate role config to keep in sync.
 

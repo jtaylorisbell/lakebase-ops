@@ -6,7 +6,7 @@ trigger: User asks about migrations, schema changes, alembic, or database schema
 
 # Database Migrations
 
-Alembic migrations target a Lakebase Postgres branch. The deployed App runs `alembic upgrade head` automatically on startup (see `app.yaml`), so production usually doesn't need manual intervention. Local dev branches need manual migration runs.
+Alembic migrations target a Lakebase Postgres branch. The deployed App runs `alembic upgrade head` automatically on startup (the command is set inline under `resources/todo_app.yml`), so production usually doesn't need manual intervention. Local dev branches need manual migration runs.
 
 `LAKEBASE_BRANCH_ID` controls which branch is targeted. When unset, the app derives it from the caller's identity (`production` for SP, `dev-{username}` for users).
 
