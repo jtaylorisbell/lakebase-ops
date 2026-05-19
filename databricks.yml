@@ -8,6 +8,31 @@ bundle:
 include:
   - resources/*.yml
 
+variables:
+  owner_email:
+    description: Workspace user granted CAN_MANAGE on the Lakebase project.
+    default: taylor.isbell@databricks.com
+
+  lakebase_project_id:
+    description: Lakebase Autoscaling project ID. The Postgres resource binding and the app's runtime config both read from this.
+    default: todo-app
+
+  lakebase_display_name:
+    description: Human-readable name for the Lakebase project in the UI.
+    default: Lakebase Todo App
+
+  lakebase_pg_version:
+    description: Postgres major version for Lakebase.
+    default: "17"
+
+  lakebase_branch:
+    description: Lakebase branch the deployed app connects to at runtime.
+    default: production
+
+  lakebase_database_id:
+    description: Platform-level database resource id under the Lakebase branch. Default is the auto-created database.
+    default: databricks-postgres
+
 sync:
   exclude:
     - node_modules/
@@ -26,7 +51,7 @@ targets:
       postgres_projects:
         todo_app_project:
           permissions:
-            - user_name: taylor.isbell@databricks.com
+            - user_name: ${var.owner_email}
               level: CAN_MANAGE
 
   prod:
@@ -35,5 +60,5 @@ targets:
       postgres_projects:
         todo_app_project:
           permissions:
-            - user_name: taylor.isbell@databricks.com
+            - user_name: ${var.owner_email}
               level: CAN_MANAGE

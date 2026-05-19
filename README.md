@@ -31,11 +31,10 @@ The app talks to Lakebase over a direct Postgres connection authenticated by an 
 ```
 lakebase-todo-app/
 ├── app.py                    # Databricks Apps entry point (imports FastAPI app)
-├── app.yaml                  # Apps runtime config (uv run alembic + uvicorn)
-├── databricks.yml            # DAB: bundle name, sync, targets
+├── databricks.yml            # DAB: bundle vars, sync, target ACLs
 ├── resources/
 │   ├── lakebase.yml          # Lakebase project resource
-│   └── todo_app.yml          # App resource — grants CAN_CONNECT_AND_CREATE on Lakebase
+│   └── todo_app.yml          # App resource — inline command/env + CAN_CONNECT_AND_CREATE on Lakebase
 ├── pyproject.toml            # Python deps (uv); replaces requirements.txt
 ├── uv.lock                   # Pinned deps — required by Databricks Apps
 ├── alembic/                  # Schema migrations (creates the `todo_app` schema)
