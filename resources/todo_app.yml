@@ -25,8 +25,12 @@ resources:
       # it owns, so all schema/table creation lives in alembic migrations that
       # run at app startup.
       resources:
+        # Reference the postgres_project resource by id (not via ${var.*}) so
+        # Terraform infers a dependency from this app on the project. Without
+        # the reference, both resources are created in parallel and the app
+        # binding fails when the production branch isn't yet READY.
         - name: postgres
           postgres:
-            branch: projects/${var.lakebase_project_id}/branches/${var.lakebase_branch}
-            database: projects/${var.lakebase_project_id}/branches/${var.lakebase_branch}/databases/${var.lakebase_database_id}
+            branch: projects/${resources.postgres_projects.todo_app_project.project_id}/branches/${var.lakebase_branch}
+            database: projects/${resources.postgres_projects.todo_app_project.project_id}/branches/${var.lakebase_branch}/databases/${var.lakebase_database_id}
             permission: CAN_CONNECT_AND_CREATE

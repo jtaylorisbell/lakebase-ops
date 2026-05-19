@@ -3,7 +3,7 @@ ifneq (,$(wildcard .env))
     export
 endif
 
-PROJECT ?= todo-app
+PROJECT ?= todo-app-v2
 BRANCH ?= production
 EMAIL ?= $(shell git config user.email)
 ROLE_ID ?= $(shell echo "$(EMAIL)" | sed 's/@.*//' | tr '.' '-')

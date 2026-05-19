@@ -53,7 +53,7 @@ class LakebaseSettings(BaseSettings):
         extra="ignore",
     )
 
-    project_id: str = "todo-app"
+    project_id: str = "todo-app-v2"
     branch_id: str = ""
     endpoint_id: str = "primary"
     database: str = "databricks_postgres"

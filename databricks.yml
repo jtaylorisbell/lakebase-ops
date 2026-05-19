@@ -15,7 +15,7 @@ variables:
 
   lakebase_project_id:
     description: Lakebase Autoscaling project ID. The Postgres resource binding and the app's runtime config both read from this.
-    default: todo-app
+    default: todo-app-v2
 
   lakebase_display_name:
     description: Human-readable name for the Lakebase project in the UI.
@@ -40,9 +40,7 @@ sync:
     - frontend/dist/
     - .venv/
     - __pycache__/
-    - "*.egg-info/"
     - .env
-    - .env.local
 
 targets:
   dev:
