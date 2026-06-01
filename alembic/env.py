@@ -12,8 +12,8 @@ from alembic import context
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from todo_app.config import SCHEMA, LakebaseSettings  # noqa: E402
-from todo_app.db.schemas import Base  # noqa: E402
+from backend.config import SCHEMA, LakebaseSettings  # noqa: E402
+from backend.db.schemas import Base  # noqa: E402
 
 config = context.config
 if config.config_file_name is not None:

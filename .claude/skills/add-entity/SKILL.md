@@ -19,7 +19,7 @@ Generate with `uv run alembic revision -m "add_foos"`, then fill in `upgrade()` 
 
 Run `uv run alembic upgrade head` against your dev branch to apply it locally (or just restart the deployed app — it migrates on startup).
 
-## 2. SQLAlchemy model — `src/todo_app/db/schemas.py`
+## 2. SQLAlchemy model — `src/backend/db/schemas.py`
 
 Add a `Foo(Base)` class next to `Todo`. The schema is set via `__table_args__`:
 
@@ -32,17 +32,17 @@ __table_args__ = (
 
 Use `Mapped[T]` and `mapped_column(...)`. UUID primary key gets both `server_default=text("gen_random_uuid()")` and a Python-side `default=lambda: str(uuid4())` so newly constructed rows have an id before flush.
 
-## 3. CRUD functions — `src/todo_app/db/crud.py`
+## 3. CRUD functions — `src/backend/db/crud.py`
 
 Mirror the Todo functions: `create_foo`, `get_foo`, `list_foos`, `update_foo`, `delete_foo`. Each takes a `Session` and any kwargs the request needs. Always `session.commit()` after mutating; `session.refresh(obj)` after writes that return the row.
 
 `list_*` should accept the filter columns and a `limit`, build a `select()` chain conditionally, and return `list(session.scalars(stmt))`.
 
-## 4. Pydantic request/response — `src/todo_app/api/schemas.py`
+## 4. Pydantic request/response — `src/backend/api/schemas.py`
 
 Add `CreateFooRequest`, `UpdateFooRequest` (all fields optional), `FooResponse` (with `model_config = {"from_attributes": True}` so it can serialize from an ORM instance), and `FooListResponse({ foos, total })` if you have a list endpoint.
 
-## 5. FastAPI routes — `src/todo_app/api/main.py`
+## 5. FastAPI routes — `src/backend/api/main.py`
 
 Add routes under `/api/foos`. Every handler takes `session: Session = Depends(get_session)`. Use the user from `get_current_user(request)` when the entity is per-user. Return `FooResponse.model_validate(obj)` for single objects. 404 with `HTTPException(status_code=404, detail="Foo not found")` when `crud.*` returns `None` / `False`.
 
@@ -58,11 +58,11 @@ Extend the `api` object with `foos: { list, create, update, delete, ... }` follo
 
 - `uv run ruff check`
 - `uv run pytest`
-- `uv run python -c "from todo_app.api.main import app; print([r.path for r in app.routes if hasattr(r,'path')])"` — confirm the new routes are registered.
+- `uv run python -c "from backend.api.main import app; print([r.path for r in app.routes if hasattr(r,'path')])"` — confirm the new routes are registered.
 - Hit one of the new endpoints against a running backend (`make migrate` first if you haven't applied the migration).
 
 ## Anti-patterns
 
 - Don't put DDL outside alembic — the App SP can only read/write objects it created via migrations.
 - Don't skip the `{"schema": SCHEMA}` table arg — defaults land in `public` where the App SP has no permissions.
-- Don't reach for `session.execute(text(...))` raw SQL when a typed `select(Foo)` works. The `LakebaseSettings`-backed engine already sets `search_path=todo_app`, but ORM queries qualify the schema explicitly which is more robust.
+- Don't reach for `session.execute(text(...))` raw SQL when a typed `select(Foo)` works. The `LakebaseSettings`-backed engine already sets `search_path={SCHEMA}`, but ORM queries qualify the schema explicitly which is more robust.

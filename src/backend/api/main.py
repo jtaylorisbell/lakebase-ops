@@ -9,8 +9,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from todo_app import __version__
-from todo_app.api.schemas import (
+from backend import __version__
+from backend.api.schemas import (
     CreateTodoRequest,
     CurrentUserResponse,
     HealthResponse,
@@ -19,9 +19,9 @@ from todo_app.api.schemas import (
     TodoStatsResponse,
     UpdateTodoRequest,
 )
-from todo_app.api.user import get_current_user
-from todo_app.db import crud
-from todo_app.db.session import get_session
+from backend.api.user import get_current_user
+from backend.db import crud
+from backend.db.session import get_session
 
 logger = structlog.get_logger()
 

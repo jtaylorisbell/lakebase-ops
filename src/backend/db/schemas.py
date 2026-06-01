@@ -7,7 +7,7 @@ from sqlalchemy import Boolean, Date, DateTime, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from todo_app.config import SCHEMA
+from backend.config import SCHEMA
 
 
 def _utc_now() -> datetime:

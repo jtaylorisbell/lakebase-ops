@@ -4,7 +4,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
-from todo_app.core.models import Priority
+from backend.core.models import Priority
 
 
 class CreateTodoRequest(BaseModel):

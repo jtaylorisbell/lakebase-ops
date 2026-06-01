@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from fastapi import Request
 
-from todo_app.config import _workspace_client
+from backend.config import _workspace_client
 
 
 @dataclass

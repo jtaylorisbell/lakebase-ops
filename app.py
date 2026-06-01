@@ -8,7 +8,7 @@ src_path = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_path))
 
 # Import and expose the FastAPI app
-from todo_app.api.main import app  # noqa: E402
+from backend.api.main import app  # noqa: E402
 
 if __name__ == "__main__":
     import uvicorn

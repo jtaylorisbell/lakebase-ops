@@ -7,7 +7,7 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from todo_app.db.schemas import Todo
+from backend.db.schemas import Todo
 
 _PRIORITY_ORDER = {"high": 1, "medium": 2, "low": 3}
 
