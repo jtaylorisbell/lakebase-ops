@@ -1,7 +1,8 @@
-"""Configuration for the Todo App — auto-resolves Lakebase connection via Databricks SDK."""
+"""Configuration — auto-resolves Lakebase connection via Databricks SDK."""
 
 from __future__ import annotations
 
+import os
 import time
 from functools import lru_cache
 from urllib.parse import quote_plus
@@ -15,7 +16,16 @@ load_dotenv()
 
 logger = structlog.get_logger()
 
-SCHEMA = "todo_app"
+# Postgres schema this app owns inside the Lakebase database. Read at module
+# load time so SQLAlchemy table definitions can reference it. The deployed app
+# gets LAKEBASE_SCHEMA injected via the bundle's app.config.env; local dev
+# sets it in .env.
+SCHEMA = os.environ.get("LAKEBASE_SCHEMA")
+if not SCHEMA:
+    raise RuntimeError(
+        "LAKEBASE_SCHEMA environment variable is required. Set it in .env "
+        "(local) or via the bundle's app.config.env block (deployed)."
+    )
 
 
 @lru_cache

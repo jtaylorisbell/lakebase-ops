@@ -33,6 +33,10 @@ variables:
     description: Platform-level database resource id under the Lakebase branch. Default is the auto-created database.
     default: databricks-postgres
 
+  lakebase_schema:
+    description: Postgres schema this app creates and owns inside the Lakebase database.
+    default: todo_app
+
 sync:
   exclude:
     - node_modules/

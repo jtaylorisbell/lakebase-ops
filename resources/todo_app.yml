@@ -19,6 +19,8 @@ resources:
             value: ${var.lakebase_project_id}
           - name: LAKEBASE_BRANCH_ID
             value: ${var.lakebase_branch}
+          - name: LAKEBASE_SCHEMA
+            value: ${var.lakebase_schema}
 
       # CAN_CONNECT_AND_CREATE lets the App SP connect to Postgres and create
       # its own schema/tables. The App SP only has read/write access to objects

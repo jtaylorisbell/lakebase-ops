@@ -37,9 +37,9 @@ lakebase-todo-app/
 │   └── todo_app.yml          # App resource — inline command/env + CAN_CONNECT_AND_CREATE on Lakebase
 ├── pyproject.toml            # Python deps (uv); replaces requirements.txt
 ├── uv.lock                   # Pinned deps — required by Databricks Apps
-├── alembic/                  # Schema migrations (creates the `todo_app` schema)
-├── src/todo_app/
-│   ├── config.py             # LakebaseSettings — auto-resolves branch/host/user/token
+├── alembic/                  # Schema migrations (creates the `LAKEBASE_SCHEMA` schema)
+├── src/backend/              # Python package (FastAPI + SQLAlchemy + Lakebase auth)
+│   ├── config.py             # LakebaseSettings — auto-resolves host/user/token
 │   ├── api/                  # FastAPI routes
 │   └── db/                   # SQLAlchemy session, models, CRUD
 └── frontend/                 # React + Vite + Tailwind
@@ -64,7 +64,7 @@ resources:
 
 Project id, branch, and database id are bundle variables defined in `databricks.yml`, so the project name lives in exactly one place and flows into both the resource binding and the app's `LAKEBASE_PROJECT_ID` env var.
 
-`CAN_CONNECT_AND_CREATE` lets the App SP connect and create new schemas/tables, but only gives it read/write access to objects it owns. So **all schema and table creation is in alembic migrations** that run as the App SP at startup (`uv run alembic upgrade head && uv run uvicorn …`, defined inline in `resources/todo_app.yml`). The App ends up owning the `todo_app` schema and everything in it.
+`CAN_CONNECT_AND_CREATE` lets the App SP connect and create new schemas/tables, but only gives it read/write access to objects it owns. So **all schema and table creation is in alembic migrations** that run as the App SP at startup (`uv run alembic upgrade head && uv run uvicorn …`, defined inline in `resources/todo_app.yml`). The App ends up owning the schema named by `LAKEBASE_SCHEMA` (default `todo_app`) and everything in it.
 
 For human developers, OAuth Postgres roles are created on-demand with `databricks postgres create-role` (see [Local development](#local-development) below). There is no separate role config to keep in sync.
 
@@ -88,7 +88,7 @@ Prerequisites: `uv`, `databricks` CLI ≥ 0.297, Node 20+.
    make branch-create NAME=dev-<your-name>
    ```
 
-4. **Run migrations on your branch** (creates the `todo_app` schema you'll own):
+4. **Run migrations on your branch** (creates the `LAKEBASE_SCHEMA` you'll own):
    ```bash
    LAKEBASE_BRANCH_ID=dev-<your-name> uv run alembic upgrade head
    ```

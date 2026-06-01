@@ -10,13 +10,12 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 
 from alembic import op
+from backend.config import SCHEMA
 
 revision: str = "0001"
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
-
-SCHEMA = "todo_app"
 
 
 def upgrade() -> None:
