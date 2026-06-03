@@ -55,5 +55,6 @@ htmlcov/
 
 # Drafts
 BLOG.md
+TALK.html
 
 .isaac/worktree_pool/

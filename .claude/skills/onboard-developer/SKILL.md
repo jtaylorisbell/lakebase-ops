@@ -6,7 +6,7 @@ trigger: User asks to onboard, add, or invite a new developer or team member.
 
 # Onboard Developer
 
-Add a new developer by editing `databricks.yml`. CI deploys the platform permission on the next push to `main`. There is no separate database-role config — developers create their own Postgres role when they create a dev branch (`make branch-create`).
+Add a new developer by editing `databricks.yml`. CI deploys the platform permission on the next push to `main`. There is no separate database-role config. Developers provision their own Postgres role when they create a branch via `make branch-create`.
 
 ## Steps
 
