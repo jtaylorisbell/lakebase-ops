@@ -17,7 +17,7 @@ Generate with `uv run alembic revision -m "add_foos"`, then fill in `upgrade()` 
 - Indexes for every column you'll filter by.
 - `downgrade()` drops everything `upgrade()` created, including triggers and indexes.
 
-Run `uv run alembic upgrade head` against your dev branch to apply it locally (or just restart the deployed app — it migrates on startup).
+Run `uv run alembic upgrade head` against your branch to apply it locally. (Or just restart the deployed app; it migrates on startup.)
 
 ## 2. SQLAlchemy model — `src/backend/db/schemas.py`
 

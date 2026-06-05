@@ -1,6 +1,6 @@
 # Lakebase Todo App
 
-A reference for running a full-stack app (FastAPI + React) on Databricks Apps backed by Lakebase Autoscaling. Everything is wired through Databricks Asset Bundles, OAuth, and the standard Databricks CLI — no PATs, no custom CLI, no Data API.
+A reference for running a full-stack app (FastAPI + React) on Databricks Apps backed by Lakebase Autoscaling. Everything is wired through Databricks Asset Bundles, OAuth, and the standard Databricks CLI. No PATs, no custom CLI, no Data API.
 
 ## Architecture
 
@@ -14,14 +14,16 @@ A reference for running a full-stack app (FastAPI + React) on Databricks Apps ba
 └────────────────────────┼────────┘
                          │ OAuth-authenticated Postgres
                          ▼
-              ┌─────────────────────┐
-              │  Lakebase Postgres  │
-              │  ┌───────────────┐  │
-              │  │  production   │  │  ← deployed app
-              │  ├───────────────┤  │
-              │  │  dev-taylor   │  │  ← local dev branch
-              │  └───────────────┘  │
-              └─────────────────────┘
+              ┌─────────────────────────────┐
+              │      Lakebase Postgres      │
+              │  ┌───────────────────────┐  │
+              │  │  production           │  │  ← deployed app
+              │  ├───────────────────────┤  │
+              │  │  dev-taylor           │  │  ← branches per dev,
+              │  │  feature-payments     │  │     feature, experiment.
+              │  │  repro-incident-1234  │  │     creation is free.
+              │  └───────────────────────┘  │
+              └─────────────────────────────┘
 ```
 
 The app talks to Lakebase over a direct Postgres connection authenticated by an OAuth token generated from the Databricks SDK. The token is refreshed transparently.
@@ -34,12 +36,12 @@ lakebase-todo-app/
 ├── databricks.yml            # DAB: bundle vars, sync, target ACLs
 ├── resources/
 │   ├── lakebase.yml          # Lakebase project resource
-│   └── todo_app.yml          # App resource — inline command/env + CAN_CONNECT_AND_CREATE on Lakebase
+│   └── todo_app.yml          # App resource: inline command/env + CAN_CONNECT_AND_CREATE on Lakebase
 ├── pyproject.toml            # Python deps (uv); replaces requirements.txt
-├── uv.lock                   # Pinned deps — required by Databricks Apps
+├── uv.lock                   # Pinned deps required by Databricks Apps
 ├── alembic/                  # Schema migrations (creates the `LAKEBASE_SCHEMA` schema)
 ├── src/backend/              # Python package (FastAPI + SQLAlchemy + Lakebase auth)
-│   ├── config.py             # LakebaseSettings — auto-resolves host/user/token
+│   ├── config.py             # LakebaseSettings, auto-resolves host/user/token
 │   ├── api/                  # FastAPI routes
 │   └── db/                   # SQLAlchemy session, models, CRUD
 └── frontend/                 # React + Vite + Tailwind
@@ -72,7 +74,7 @@ For human developers, OAuth Postgres roles are created on-demand with `databrick
 
 Prerequisites: `uv`, `databricks` CLI ≥ 0.297, Node 20+.
 
-1. **Authenticate** — once per workspace:
+1. **Authenticate** (once per workspace):
    ```bash
    databricks auth login --host https://<workspace> --profile todo-app-dev
    ```
@@ -81,11 +83,11 @@ Prerequisites: `uv`, `databricks` CLI ≥ 0.297, Node 20+.
    DATABRICKS_CONFIG_PROFILE=todo-app-dev
    ```
 
-2. **Get platform access** — an admin adds you to the `permissions` block under each target in `databricks.yml` and runs `databricks bundle deploy`. This grants you `CAN_MANAGE` on the Lakebase project so you can create dev branches.
+2. **Get platform access.** An admin adds you to the `permissions` block under each target in `databricks.yml` and runs `databricks bundle deploy`. This grants you `CAN_MANAGE` on the Lakebase project so you can create branches.
 
-3. **Create your dev branch** — this also provisions your OAuth Postgres role on the branch:
+3. **Create a branch.** Fork one off `production` and provision your OAuth Postgres role on it. Branches are copy-on-write and free, so `NAME` can be anything: per dev, per feature, per experiment.
    ```bash
-   make branch-create NAME=dev-<your-name>
+   make branch-create NAME=dev-<your-name>          # or feature-foo, repro-incident-1234, …
    ```
 
 4. **Run migrations on your branch** (creates the `LAKEBASE_SCHEMA` you'll own):
@@ -120,8 +122,8 @@ make migrate-new                        # new empty revision
 
 CI uses a Databricks-managed service principal (`DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET`).
 
-- **deploy-dev.yml** — every push to `main` runs `databricks bundle deploy -t dev` then `databricks bundle run -t dev todo_app`. Migrations run inside the App on startup.
-- **release-prod.yml** — manual, runs tests then deploys to `prod` and tags a GitHub release.
+- **deploy-dev.yml** runs every push to `main` runs `databricks bundle deploy -t dev` then `databricks bundle run -t dev todo_app`. Migrations run inside the App on startup.
+- **release-prod.yml** is manual,, runs tests then deploys to `prod` and tags a GitHub release.
 
 ## References
 
