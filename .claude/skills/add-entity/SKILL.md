@@ -15,6 +15,7 @@ Generate with `uv run alembic revision -m "add_foos"`, then fill in `upgrade()` 
 - `gen_random_uuid()` primary key.
 - `created_at` / `updated_at` columns with `server_default=sa.text("now()")` and a `set_updated_at` trigger if you want the timestamp to advance on update (reuse the function defined in 0001 — `"{SCHEMA}".set_updated_at()`).
 - Indexes for every column you'll filter by.
+- **`op.execute(f'ALTER TABLE "{SCHEMA}".foos REPLICA IDENTITY FULL')` right after `create_table`.** Required for Lakebase CDF to capture updates/deletes. Migration 0002 installs a global event trigger that does this automatically *if* the migration role has superuser. The App SP doesn't, so the explicit ALTER is the reliable path.
 - `downgrade()` drops everything `upgrade()` created, including triggers and indexes.
 
 Run `uv run alembic upgrade head` against your branch to apply it locally. (Or just restart the deployed app; it migrates on startup.)

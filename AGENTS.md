@@ -10,6 +10,7 @@ Read this first. It's the canonical map for using this repo as a starting point 
 - **Branching.** `make branch-create NAME=<anything>` forks a copy-on-write branch from production and provisions your OAuth Postgres role on it in one command. Branches are free, so use them per dev, per feature, per experiment.
 - **React + Vite + TanStack Query frontend.** `frontend/` is a fully wired SPA that talks to `/api/*` via the existing client.
 - **CI/CD.** `.github/workflows/deploy-dev.yml` deploys on every push to `main`; `release-prod.yml` is a manual prod release.
+- **Lakebase CDF readiness.** Migration `0002` sets `REPLICA IDENTITY FULL` on every existing app table and tries to install a global `CREATE TABLE` event trigger that auto-applies it to future tables. New entities added via the `add-entity` skill include an explicit ALTER so the App SP (which lacks superuser) is never a blocker. Starting the actual feed is a workspace-UI step; see the section at the bottom of this file.
 
 ## Customizing this for your app
 
@@ -78,3 +79,21 @@ Branches are copy-on-write and free. `NAME` can be anything: `dev-taylor`, `feat
 │   └── db/                    # SQLAlchemy session, ORM models, CRUD
 └── frontend/                  # React + Vite + TanStack Query
 ```
+
+## Enabling Lakebase CDF
+
+Migration 0002 prepares every app table for CDF (sets `REPLICA IDENTITY FULL`). Three things still need to happen outside the repo before changes flow to Unity Catalog:
+
+1. **Workspace preview.** A workspace admin enables the **Lakebase Change Data Feed** preview from the workspace Previews page.
+2. **Destination UC perms.** The identity starting CDF needs `USE CATALOG`, `USE SCHEMA`, and `CREATE TABLE` on the destination Unity Catalog catalog and schema, plus `CAN MANAGE` on the Lakebase project. Project owners already have `CAN MANAGE`.
+3. **Start the feed.** In the workspace: open **Lakebase Postgres** (app switcher) → your project → branch → **Change Data Feed** tab → **Start**. Pick the source schema (`LAKEBASE_SCHEMA`) and the destination UC catalog + schema.
+
+Tables show up in Unity Catalog as `lb_<table_name>_history` Delta tables, batched ~every 15s. Inspect feed state from Postgres with:
+
+```sql
+SELECT * FROM wal2delta.tables;
+```
+
+Updates produce two rows (`update_preimage` + `update_postimage`); deletes produce one (`delete`). See the [Lakebase CDF doc](https://learn.microsoft.com/en-us/azure/databricks/oltp/projects/lakebase-cdf) for the destination schema and downstream patterns (materialized views, Spark Declarative Pipelines, Structured Streaming `foreachBatch`).
+
+**Limitations to know.** Source must be `databricks_postgres` (this repo already uses it). Partitioned tables aren't supported. Empty tables are skipped until they have at least one row. Destination catalogs configured with default storage aren't supported.

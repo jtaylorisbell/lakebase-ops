@@ -122,12 +122,25 @@ make migrate-new                        # new empty revision
 
 CI uses a Databricks-managed service principal (`DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET`).
 
-- **deploy-dev.yml** runs every push to `main` runs `databricks bundle deploy -t dev` then `databricks bundle run -t dev todo_app`. Migrations run inside the App on startup.
-- **release-prod.yml** is manual,, runs tests then deploys to `prod` and tags a GitHub release.
+- **deploy-dev.yml** runs on every push to `main`: `databricks bundle deploy -t dev` then `databricks bundle run -t dev todo_app`. Migrations run inside the App on startup.
+- **release-prod.yml** is manual; runs tests then deploys to `prod` and tags a GitHub release.
+
+## Lakebase Change Data Feed (CDF)
+
+Migration `0002` prepares every app table for CDF by setting `REPLICA IDENTITY FULL` (required so updates and deletes carry the full pre- and post-row state in the WAL). It also tries to install a global `CREATE TABLE` event trigger so future tables get the same treatment automatically; the App SP lacks superuser, so the trigger usually skips with a `NOTICE`. The `add-entity` skill includes the explicit `ALTER` on new tables to cover that case.
+
+Three things still need to happen outside the repo before changes flow to Unity Catalog:
+
+1. A workspace admin enables the **Lakebase Change Data Feed** preview from the workspace Previews page.
+2. The identity starting the feed needs `USE CATALOG`, `USE SCHEMA`, and `CREATE TABLE` on the destination Unity Catalog catalog/schema, plus `CAN MANAGE` on the Lakebase project.
+3. In the workspace: open **Lakebase Postgres** → your project → branch → **Change Data Feed** → **Start**. Pick the source schema (`LAKEBASE_SCHEMA`) and the destination UC catalog + schema.
+
+Captured tables show up as `lb_<table_name>_history` Delta tables, batched ~every 15s. Inspect feed state from Postgres with `SELECT * FROM wal2delta.tables;`. See the [Lakebase CDF doc](https://learn.microsoft.com/en-us/azure/databricks/oltp/projects/lakebase-cdf) for the destination schema, data type mapping, and downstream consumer patterns (materialized views, Spark Declarative Pipelines, Structured Streaming).
 
 ## References
 
 - [Lakebase project Postgres roles](https://docs.databricks.com/aws/en/oltp/projects/postgres-roles)
+- [Lakebase Change Data Feed](https://learn.microsoft.com/en-us/azure/databricks/oltp/projects/lakebase-cdf)
 - [Databricks Apps resources](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/resources)
 - [Databricks Asset Bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/)
 - [Alembic](https://alembic.sqlalchemy.org/)
