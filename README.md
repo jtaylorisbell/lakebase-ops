@@ -127,7 +127,12 @@ CI uses a Databricks-managed service principal (`DATABRICKS_CLIENT_ID` / `DATABR
 
 ## Lakebase Change Data Feed (CDF)
 
-Migration `0002` prepares every app table for CDF by setting `REPLICA IDENTITY FULL` (required so updates and deletes carry the full pre- and post-row state in the WAL). It also tries to install a global `CREATE TABLE` event trigger so future tables get the same treatment automatically; the App SP lacks superuser, so the trigger usually skips with a `NOTICE`. The `add-entity` skill includes the explicit `ALTER` on new tables to cover that case.
+CDF needs `REPLICA IDENTITY FULL` on every captured table. The repo handles the Postgres-side prep in two pieces, split by privilege:
+
+- **Migration `0002`** runs on every App startup as the App SP. It sets `REPLICA IDENTITY FULL` on every app-owned table (idempotent), and defines the helper function `"{LAKEBASE_SCHEMA}".set_full_replica_identity()` in the app schema.
+- **`make install-cdf-trigger`** runs as the deploying identity (project owner / `databricks_superuser`). It registers a global `CREATE TABLE` event trigger that calls the function above. After it runs once, every future `CREATE TABLE` anywhere in the database auto-applies `REPLICA IDENTITY FULL`. CI (`deploy-dev.yml` and `release-prod.yml`) calls this automatically after `bundle run`.
+
+Why split: event triggers are database-level objects that require superuser in Postgres. The App SP intentionally doesn't have `databricks_superuser` (only `CAN_CONNECT_AND_CREATE`), so the trigger has to be registered by an identity that does — your CI service principal or a developer running `make install-cdf-trigger` locally. Both are project owners by default.
 
 Three things still need to happen outside the repo before changes flow to Unity Catalog:
 

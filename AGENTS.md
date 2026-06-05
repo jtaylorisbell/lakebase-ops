@@ -10,7 +10,7 @@ Read this first. It's the canonical map for using this repo as a starting point 
 - **Branching.** `make branch-create NAME=<anything>` forks a copy-on-write branch from production and provisions your OAuth Postgres role on it in one command. Branches are free, so use them per dev, per feature, per experiment.
 - **React + Vite + TanStack Query frontend.** `frontend/` is a fully wired SPA that talks to `/api/*` via the existing client.
 - **CI/CD.** `.github/workflows/deploy-dev.yml` deploys on every push to `main`; `release-prod.yml` is a manual prod release.
-- **Lakebase CDF readiness.** Migration `0002` sets `REPLICA IDENTITY FULL` on every existing app table and tries to install a global `CREATE TABLE` event trigger that auto-applies it to future tables. New entities added via the `add-entity` skill include an explicit ALTER so the App SP (which lacks superuser) is never a blocker. Starting the actual feed is a workspace-UI step; see the section at the bottom of this file.
+- **Lakebase CDF readiness.** Migration `0002` sets `REPLICA IDENTITY FULL` on every existing app table and defines the helper function in the app schema. A separate post-deploy step (`make install-cdf-trigger`, wired into CI) registers the global `CREATE TABLE` event trigger as the project owner so future tables auto-apply REPLICA IDENTITY FULL without the App SP needing superuser. Starting the actual feed is a workspace-UI step; see the section at the bottom of this file.
 
 ## Customizing this for your app
 
@@ -48,6 +48,7 @@ Branches are copy-on-write and free. `NAME` can be anything: `dev-taylor`, `feat
 - `make migrate`: run alembic against `$BRANCH` (defaults to `production`)
 - `make role-create BRANCH=<anything>`: provision the caller's OAuth role on a branch (idempotent: errors with BadRequest if it exists)
 - `databricks bundle deploy -t dev` / `databricks bundle run -t dev todo_app`: deploy + start the app
+- `make install-cdf-trigger`: register the global event trigger so future tables auto-get REPLICA IDENTITY FULL (must run as a project owner; CI does this automatically after `bundle run`)
 - `uv run uvicorn app:app --host 0.0.0.0 --port 8000`: backend dev server (reads `.env`)
 - `cd frontend && npm run dev`: frontend dev server (proxies `/api` to 8000)
 
@@ -82,7 +83,12 @@ Branches are copy-on-write and free. `NAME` can be anything: `dev-taylor`, `feat
 
 ## Enabling Lakebase CDF
 
-Migration 0002 prepares every app table for CDF (sets `REPLICA IDENTITY FULL`). Three things still need to happen outside the repo before changes flow to Unity Catalog:
+The repo handles the Postgres-side prep automatically:
+
+- Alembic migration `0002` (runs on every App startup as the App SP) sets `REPLICA IDENTITY FULL` on every app-owned table and defines `"{LAKEBASE_SCHEMA}".set_full_replica_identity()`.
+- `make install-cdf-trigger` (or the equivalent CI step in `deploy-dev.yml` / `release-prod.yml`) runs as the project owner and registers a global `CREATE TABLE` event trigger. After it runs once, every future `CREATE TABLE` automatically gets `REPLICA IDENTITY FULL` — including tables alembic adds later.
+
+Three things still need to happen outside the repo before changes flow to Unity Catalog:
 
 1. **Workspace preview.** A workspace admin enables the **Lakebase Change Data Feed** preview from the workspace Previews page.
 2. **Destination UC perms.** The identity starting CDF needs `USE CATALOG`, `USE SCHEMA`, and `CREATE TABLE` on the destination Unity Catalog catalog and schema, plus `CAN MANAGE` on the Lakebase project. Project owners already have `CAN MANAGE`.

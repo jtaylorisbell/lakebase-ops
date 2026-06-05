@@ -1,4 +1,4 @@
-"""enable Lakebase CDF: REPLICA IDENTITY FULL + auto-apply event trigger
+"""enable Lakebase CDF: REPLICA IDENTITY FULL + companion function
 
 Revision ID: 0002
 Revises: 0001
@@ -11,16 +11,18 @@ updates and deletes are silently dropped from the feed.
 This migration:
   1. Sets REPLICA IDENTITY FULL on every table the App SP owns (uses
      `pg_class.relreplident <> 'f'` so re-running is a no-op).
-  2. Defines a `set_full_replica_identity()` event-trigger function in the
-     app schema.
-  3. Tries to register the function as a global event trigger that fires
-     after every CREATE TABLE. Creating an event trigger requires
-     superuser, which the App SP lacks. If that fails, the migration logs
-     a NOTICE and continues. The `add-entity` skill documents the
-     belt-and-suspenders ALTER that new table migrations should include.
+  2. Defines `"{SCHEMA}".set_full_replica_identity()` — the function that
+     a CREATE TABLE event trigger calls. The App SP can create functions
+     in its own schema, so this is fine to do here.
+
+Registering the actual event trigger is a separate, database-level step
+that requires superuser. See `scripts/install_cdf_event_trigger.py` and
+`make install-cdf-trigger` — those run as the deploying identity (project
+owner / `databricks_superuser`), not the App SP.
 
 Configure CDF in the Lakebase UI (Branch overview → Change Data Feed →
-Start) after this migration runs. See README and AGENTS.md.
+Start) after this migration plus the event-trigger install. See README
+and AGENTS.md.
 """
 
 from collections.abc import Sequence
@@ -76,40 +78,12 @@ def upgrade() -> None:
         END $body$;
     """)
 
-    # Global event trigger registration. Requires superuser. The App SP
-    # (CAN_CONNECT_AND_CREATE) does not have it; the catch makes this
-    # migration safe to run regardless.
-    op.execute(f"""
-        DO $body$
-        BEGIN
-            EXECUTE $stmt$
-                CREATE EVENT TRIGGER set_full_replica_identity_on_create
-                ON ddl_command_end
-                WHEN TAG IN ('CREATE TABLE')
-                EXECUTE FUNCTION "{SCHEMA}".set_full_replica_identity()
-            $stmt$;
-        EXCEPTION
-            WHEN insufficient_privilege THEN
-                RAISE NOTICE
-                    'Skipping CREATE EVENT TRIGGER: current role lacks superuser. '
-                    'New tables must include explicit ALTER TABLE ... REPLICA IDENTITY FULL '
-                    'in their migrations. See the add-entity skill.';
-            WHEN duplicate_object THEN
-                NULL;
-        END $body$;
-    """)
+    # The event trigger that calls this function is installed separately
+    # at deploy time by `make install-cdf-trigger` (runs as project owner
+    # with databricks_superuser). See scripts/install_cdf_event_trigger.py.
 
 
 def downgrade() -> None:
-    op.execute("""
-        DO $body$
-        BEGIN
-            EXECUTE 'DROP EVENT TRIGGER IF EXISTS set_full_replica_identity_on_create';
-        EXCEPTION
-            WHEN insufficient_privilege THEN
-                RAISE NOTICE 'Cannot drop event trigger without superuser; leaving it in place.';
-        END $body$;
-    """)
     op.execute(f'DROP FUNCTION IF EXISTS "{SCHEMA}".set_full_replica_identity()')
     op.execute(f"""
         DO $body$
