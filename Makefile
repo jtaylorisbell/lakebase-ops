@@ -9,12 +9,18 @@ EMAIL ?= $(shell git config user.email)
 ROLE_ID ?= $(shell echo "$(EMAIL)" | sed 's/@.*//' | tr '.' '-')
 
 # ── Bundle ──────────────────────────────────────────
-.PHONY: deploy validate
+.PHONY: deploy validate install-cdf-trigger
 validate:
 	databricks bundle validate
 
 deploy: validate
 	databricks bundle deploy
+
+# Install the CDF auto-REPLICA-IDENTITY-FULL event trigger.
+# Runs as the calling identity (must be a project owner / databricks_superuser).
+# Idempotent — drop + create. Requires alembic migration 0002 to have run first.
+install-cdf-trigger:
+	uv run python scripts/install_cdf_event_trigger.py
 
 # ── Migrations ──────────────────────────────────────
 .PHONY: migrate migrate-status migrate-downgrade migrate-new

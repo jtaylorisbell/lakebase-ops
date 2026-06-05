@@ -122,12 +122,30 @@ make migrate-new                        # new empty revision
 
 CI uses a Databricks-managed service principal (`DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET`).
 
-- **deploy-dev.yml** runs every push to `main` runs `databricks bundle deploy -t dev` then `databricks bundle run -t dev todo_app`. Migrations run inside the App on startup.
-- **release-prod.yml** is manual,, runs tests then deploys to `prod` and tags a GitHub release.
+- **deploy-dev.yml** runs on every push to `main`: `databricks bundle deploy -t dev` then `databricks bundle run -t dev todo_app`. Migrations run inside the App on startup.
+- **release-prod.yml** is manual; runs tests then deploys to `prod` and tags a GitHub release.
+
+## Lakebase Change Data Feed (CDF)
+
+CDF needs `REPLICA IDENTITY FULL` on every captured table. The repo handles the Postgres-side prep in two pieces, split by privilege:
+
+- **Migration `0002`** runs on every App startup as the App SP. It sets `REPLICA IDENTITY FULL` on every app-owned table (idempotent), and defines the helper function `"{LAKEBASE_SCHEMA}".set_full_replica_identity()` in the app schema.
+- **`make install-cdf-trigger`** runs as the deploying identity (project owner / `databricks_superuser`). It registers a global `CREATE TABLE` event trigger that calls the function above. After it runs once, every future `CREATE TABLE` anywhere in the database auto-applies `REPLICA IDENTITY FULL`. CI (`deploy-dev.yml` and `release-prod.yml`) calls this automatically after `bundle run`.
+
+Why split: event triggers are database-level objects that require superuser in Postgres. The App SP intentionally doesn't have `databricks_superuser` (only `CAN_CONNECT_AND_CREATE`), so the trigger has to be registered by an identity that does — your CI service principal or a developer running `make install-cdf-trigger` locally. Both are project owners by default.
+
+Three things still need to happen outside the repo before changes flow to Unity Catalog:
+
+1. A workspace admin enables the **Lakebase Change Data Feed** preview from the workspace Previews page.
+2. The identity starting the feed needs `USE CATALOG`, `USE SCHEMA`, and `CREATE TABLE` on the destination Unity Catalog catalog/schema, plus `CAN MANAGE` on the Lakebase project.
+3. In the workspace: open **Lakebase Postgres** → your project → branch → **Change Data Feed** → **Start**. Pick the source schema (`LAKEBASE_SCHEMA`) and the destination UC catalog + schema.
+
+Captured tables show up as `lb_<table_name>_history` Delta tables, batched ~every 15s. Inspect feed state from Postgres with `SELECT * FROM wal2delta.tables;`. See the [Lakebase CDF doc](https://learn.microsoft.com/en-us/azure/databricks/oltp/projects/lakebase-cdf) for the destination schema, data type mapping, and downstream consumer patterns (materialized views, Spark Declarative Pipelines, Structured Streaming).
 
 ## References
 
 - [Lakebase project Postgres roles](https://docs.databricks.com/aws/en/oltp/projects/postgres-roles)
+- [Lakebase Change Data Feed](https://learn.microsoft.com/en-us/azure/databricks/oltp/projects/lakebase-cdf)
 - [Databricks Apps resources](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/resources)
 - [Databricks Asset Bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/)
 - [Alembic](https://alembic.sqlalchemy.org/)

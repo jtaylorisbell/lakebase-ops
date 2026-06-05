@@ -8,6 +8,9 @@ env:
   DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
   DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
   DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+  LAKEBASE_PROJECT_ID: todo-app-v2
+  LAKEBASE_BRANCH_ID: production
+  LAKEBASE_SCHEMA: todo_app
 
 jobs:
   deploy-dev:
@@ -15,6 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: databricks/setup-cli@main
         with:
           version: 0.297.2
@@ -24,3 +31,9 @@ jobs:
 
       - name: Deploy app source
         run: databricks bundle run -t dev todo_app
+
+      # Runs as the CI SP (project owner / databricks_superuser).
+      # Must run after `bundle run` so migration 0002 has created the
+      # function the trigger references.
+      - name: Install CDF event trigger
+        run: uv run python scripts/install_cdf_event_trigger.py
